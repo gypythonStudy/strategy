@@ -7,6 +7,12 @@ type:"buy",
 currentOrderid:0
 }
 
+var funding = 0; //期货账户开始金额
+var Success = '#5cb85c'; //成功颜色
+var Danger = '#ff0000'; //危险颜色
+var Warning = '#f0ad4e'; //警告颜色
+var runTime;
+
 const BOLLEnum = {
 aboveUpline: 'aboveUpline',
 abovemidLine: 'abovemidLine',
@@ -19,7 +25,9 @@ throughdownLine: 'throughdownLine',//突破下轨
 underUpline:'underUpline',//上轨之下
 undermidLine: 'undermidLine',//中轨之下
 underdownLine: 'underdownLine',//下轨之下
-    //underLowdownLine: 'underLowdownLine',////假下轨之下
+//beLowUpLine:'beLowmidLine',
+//beLowmidLine: 'beLowmidLine',////下轨之下
+beLowdownLine: 'beLowdownLine',////下轨之下
     
 }
 
@@ -77,23 +85,31 @@ function BOLLCheck() {
         var bollEnum = calcuetLine(OpenPrice3,ClosePrice3,upLine,midLine,downLine);
         var prebollEnum = calcuetLine(OpenPrice,ClosePrice,preupLine,premidLine,predownLine);
         var prebollEnum2 = calcuetLine(OpenPrice2,ClosePrice2,preupLine2,premidLine2,predownLine2);
-        return {bollEnum:bollEnum,prebollEnum:prebollEnum,prebollEnum2:prebollEnum2};
+//        return {bollEnum:bollEnum,prebollEnum:prebollEnum,prebollEnum2:prebollEnum2};
+        
+        if (bollEnum == BOLLEnum.throughdownLine && (prebollEnum == BOLLEnum.throughdownLine || prebollEnum == BOLLEnum.throughdownLine) && (prebollEnum2.throughdownLine || prebollEnum2.beLowdownLine)) {
+            return 1.5;
+        }
     }
-    return nil;
+    return 0;
 }
 
 function calcuetLine(OpenPrice2,ClosePrice2,preupLine2,premidLine2,predownLine2) {
-    if (OpenPrice2 > preupLine2 && ClosePrice2 > preupLine2) {
+    if (OpenPrice2 >= preupLine2 && ClosePrice2 >= preupLine2) {
         return BOLLEnum.aboveUpline;
     }
     
-    if (OpenPrice2 > preupLine2 && ClosePrice2 < preupLine2) {
+    if (OpenPrice2 >= preupLine2 && ClosePrice2 <= preupLine2) {
         return BOLLEnum.underUpline;
     }
     
-    if (OpenPrice2 < preupLine2 && ClosePrice2 > preupLine2) {
+    if (OpenPrice2 < preupLine2 && ClosePrice2 >= preupLine2) {
         return BOLLEnum.throughUpline;
     }
+    
+//    if (OpenPrice2 < preupLine2 && ClosePrice2 < preupLine2 && OpenPrice2 > premidLine2 && ClosePrice2 > premidLine2) {
+//        return BOLLEnum.beLowUpLine;
+//    }
     
     if (OpenPrice2 > premidLine2 && ClosePrice2 > premidLine2)  {
         return BOLLEnum.abovemidLine;
@@ -117,6 +133,10 @@ function calcuetLine(OpenPrice2,ClosePrice2,preupLine2,premidLine2,predownLine2)
     
     if (OpenPrice2 < predownLine2 && ClosePrice2 > predownLine2)  {
         return BOLLEnum.throughdownLine;
+    }
+    
+    if (OpenPrice2 < predownLine2 && ClosePrice2 < predownLine2)  {
+        return BOLLEnum.beLowdownLine;
     }
     Log(calcuetLine失败)
     return nil;
@@ -166,7 +186,6 @@ function MACheck() {
             //            }
         }
         
-        
     }
     
     //Log(buyCount, sellCount)
@@ -189,22 +208,59 @@ function ma7Check() {
     if (records && records.length > 7) {
         var ma = TA.MA(records, 7)
         //        var currrentPrice = GetTicker().Last; //当前价格
-        var ma1 = boll[0][records.length - 1]
+        var ma1 = ma[0][records.length - 1]
         var open = records[records.length - 1].Close // 收盘价格
         var close = records[records.length - 1].Open // 最低价
+        var ma7e = calcuetma7(ma1,open,close)
         
-        var ma2 = boll[1][records.length - 2]
+        var ma2 = ma[1][records.length - 2]
         var open2 = records[records.length - 2].Close // 收盘价格
         var close2 = records[records.length - 2].Open // 最低价
-        
-        var ma3 = boll[2][records.length - 3]
+        var ma7e2 = calcuetma7(ma2,open2,close2)
+
+        var ma3 = ma[2][records.length - 3]
         var open3 = records[records.length - 3].Close // 收盘价格
         var close3 = records[records.length - 3].Open // 最低价
+        var ma7e3 = calcuetma7(ma3,open3,close3)
+        
+        if (ma7e == MA7Enum.above && ma7e2 == MA7Enum.above && ma7e3 == MA7Enum.above) {
+            return 2.5;// 1、2、3. 7上
+        }
+      
+        if (ma7e == MA7Enum.above && ma7e2 == MA7Enum.throughup && (ma7e3 == MA7Enum.throughup || ma7e3 == MA7Enum.throughdow)){
+            return 2;// 1.上 2、3. 7上穿
+        }
+        if (ma7e == MA7Enum.above && (ma7e2 == MA7Enum.throughup || ma7e2 == MA7Enum.throughdow) && ma7e3 == MA7Enum.under) {
+            return 1.5;// 1.上 2.上穿/下穿 3.下
+        }
+        if (ma7e == MA7Enum.throughup && (ma7e2 == MA7Enum.above || ma7e2 == MA7Enum.throughup) && (ma7e3 == MA7Enum.above || ma7e3 == MA7Enum.throughup)) {
+            return 1.4;// 1、2、3. 7上穿
+        }
+
+//        if (ma7e == MA7Enum.throughup && ma7e2 == MA7Enum.above && ma7e3 == MA7Enum.above) {
+//            return 1;// 1. 7上穿 2/3. 上/上穿
+//        }
+//        if (ma7e == MA7Enum.under && ma7e2 == MA7Enum.under && ma7e3 == MA7Enum.under) {
+//            return -1.5;// 全部在7日线之下
+//        }
+        if (ma7e == MA7Enum.under && ma7e2 == MA7Enum.under && ma7e3 == MA7Enum.under) {
+            return -2.5;// 1、2、3. 7上
+        }
+        
+        if (ma7e == MA7Enum.under && ma7e2 == MA7Enum.throughdow && (ma7e3 == MA7Enum.throughup || ma7e3 == MA7Enum.throughdow)){
+            return -2;// 1.上 2、3. 7上穿
+        }
+        if (ma7e == MA7Enum.under && (ma7e2 == MA7Enum.throughup || ma7e2 == MA7Enum.throughdow) && ma7e3 == MA7Enum.above) {
+            return -1.5;// 1.上 2.上穿/下穿 3.下
+        }
+        if (ma7e == MA7Enum.throughdow && (ma7e2 == MA7Enum.under || ma7e2 == MA7Enum.throughdow) && (ma7e3 == MA7Enum.under || ma7e3 == MA7Enum.throughdow)) {
+            return -1.4;// 1、2、3. 7上穿
+        }
         
         
     }
     
-    return nil;
+    return 0;
     
 }
 
@@ -214,7 +270,7 @@ function calcuetma7(ma,open,close) {
         return MA7Enum.under
     }
     
-    if (open >= ma && close <== ma) {
+    if (open >= ma && close <= ma) {
         return MA7Enum.throughdow
     }
     
@@ -316,6 +372,8 @@ function isCanClose() {
     //    if (result) {
     //        return result;
     //    }
+    var ma7 =  ma7Check()
+
     if (asset.isOpenmore) {
         /*
          if (d < -0.12) {
@@ -335,7 +393,9 @@ function isCanClose() {
          return 2;
          }
          */
-        
+        if (ma7 < 0) {
+            return 2;
+        }
         
         var diff = (currrentPrice - asset.openprice) / asset.openprice * currrentPrice * asset.amount;
         if (diff >= 2.5) {
@@ -357,6 +417,9 @@ function isCanClose() {
         
         
     } else {
+        if (ma7 < 0) {
+                   return 2;
+               }
         /*
          if (d > 0.12) {
          Log('开空正常离场', '@');
@@ -445,6 +508,66 @@ function openAction(type) {
     Sleep(1000);
 }
 
+
+function StartTime() {
+    var StartTime = _G("StartTime");
+    if (StartTime == null) {
+        StartTime = _D();
+        _G("StartTime", StartTime);
+    }
+    return StartTime;
+}
+
+function RuningTime() {
+    var ret = {};
+    var dateBegin = new Date(StartTime());
+    var dateEnd = new Date();
+    var tmpHours = dateEnd.getHours();
+    dateEnd.setHours(tmpHours + 8); //时区+8
+    var dateDiff = dateEnd.getTime() - dateBegin.getTime();
+    var dayDiff = Math.floor(dateDiff / (24 * 3600 * 1000));
+    var leave1 = dateDiff % (24 * 3600 * 1000);
+    var hours = Math.floor(leave1 / (3600 * 1000));
+    var leave2 = leave1 % (3600 * 1000);
+    var minutes = Math.floor(leave2 / (60 * 1000));
+    ret.dayDiff = dayDiff;
+    ret.hours = hours;
+    ret.minutes = minutes;
+    ret.str = "运行时间: " + dayDiff + " 天 " + hours + " 小时 " + minutes + " 分钟";
+    return ret;
+}
+                             
+ function AppendedStatus() {
+     var accountTable = {
+         type: "table",
+         title: "币种信息",
+         cols: ["开仓方向","开仓价格","当前价格","盈利信息"],
+         rows: []
+     };
+     var runday = runTime.dayDiff;
+     if (runday == 0) {
+         runday = 1;
+     }
+//     var profitColors = Danger;
+//     var totalProfit = assets.USDT.total_balance - funding; //总盈利
+//     if (totalProfit > 0) {
+//         profitColors = Success;
+//     }
+//     var dayProfit = totalProfit / runday; //天盈利
+//     var dayRate = dayProfit / funding * 100;
+    var currrentPrice = GetTicker().Last; //当前价格
+                    var    diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
+
+     accountTable.rows.push([
+         runday,
+         '$' + (asset.isOpenmore ? "多" + Success : "空" + Danger) ,
+         '$' + asset.openprice,
+         '$' + currrentPrice,
+         '$' + diff,
+     ]);
+     return runTime.str + '\n' + '`' + JSON.stringify(accountTable) + '`\n' + "更新时间: " + _D() + '\n';
+ }
+
 function main() {
     Log(exchange.GetAccount());
     exchange.SetContractType("swap")
@@ -459,24 +582,33 @@ function main() {
             //确定是否在MACD牛市范围
             var result = MACheck();
             if (result === 1) {
-                openAction("buy")
-                Log('开多:', '@');
+                var ma7 =  ma7Check()
+                             if ( ma7 > 0) {
+                             openAction("buy")
+                             Log('开多:', '@');
+                             }
+               
             } else if (result === -1) {
-                openAction("sell")
-                Log('开空:', '@');
+                             if (ma7 < 0) {
+                             
+                             openAction("sell")
+                             Log('开空:', '@');
+                             }
             }
         } else {
             //加仓操作
-            if (isCanClose() == 1) {
-                openAction(asset.type)
-            } else  {
+//            if (isCanClose() == 1) {
+//                openAction(asset.type)
+//            } else  {
                 //平仓操作
                 if (isCanClose() == 2) {
                     closeAction()
                 }
-            }
+//            }
             
         }
+        runTime = RuningTime();
+LogStatus(AppendedStatus());
         
         //等待下次查询交易所
         Sleep(1000 * 10);
