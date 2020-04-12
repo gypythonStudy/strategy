@@ -165,7 +165,9 @@ function MACheck() {
     var sellCount = 0
     for (var i = 0; i < mcdArray.length; i++) {
         var model = mcdArray[i];
-        if ((model.d > 0) && (model.m < 0) && (model.c < 0) && (model.m > model.c)) {
+       if ((model.d > 0) && (model.m < 0) && (model.c < 0) && (model.m > model.c)) {
+           // if ((model.d > 0)) {
+
             buyCount += 1;
             if (i == 0) {
                 firstBuy = true;
@@ -176,6 +178,8 @@ function MACheck() {
         }
 
         if ((model.d < 0) && (model.m > 0) && (model.c > 0) && (model.m < model.c)) {
+        //if ((model.d < 0)) {
+
             sellCount = sellCount + 1;
             if (i == 0) {
                 firstSell = true;
@@ -392,12 +396,13 @@ function isCanClose() {
          return 2;
          }
          */
-        if (ma7 < 0) {
+                var diff = (currrentPrice - asset.openprice) / asset.openprice * currrentPrice * asset.amount;
+
+        if (ma7 < 0 && ((diff <= -1.2) || diff > 0.3)) {
             Log('开多ma7', ma7, '盈利', diff, '@');
             return 2;
         }
 
-        var diff = (currrentPrice - asset.openprice) / asset.openprice * currrentPrice * asset.amount;
         if (diff >= 2.5) {
             Log('开多盈利离场', diff, '@');
             return 2;
@@ -417,7 +422,9 @@ function isCanClose() {
 
 
     } else {
-        if (ma7 > 0) {
+                var diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
+
+        if (ma7 > 0 && ((diff <= -1.2) || diff > 0.3)) {
             Log('开空ma7', ma7, '盈利', diff, '@');
             return 2;
         }
@@ -438,7 +445,6 @@ function isCanClose() {
          }
          */
 
-        var diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
         if (diff >= 2.5) {
             Log('开空获利离场', diff, '@');
             return 2;
@@ -582,8 +588,9 @@ function main() {
 
             //确定是否在MACD牛市范围
             var result = MACheck();
+                             var ma7 = ma7Check()
             if (result === 1) {
-                var ma7 = ma7Check()
+                             Log('多'+ma7);
                 if (ma7 > 0) {
                     openAction("buy")
                     Log('开多ma7', ma7, '@');
@@ -591,6 +598,7 @@ function main() {
                 }
 
             } else if (result === -1) {
+                             Log('空'+ma7);
                 if (ma7 < 0) {
 
                     openAction("sell")
@@ -619,3 +627,4 @@ function main() {
 
     }
 }
+
