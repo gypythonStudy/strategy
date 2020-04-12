@@ -573,16 +573,18 @@ function isCanClose() {
 
 function closeAction() {
     var currrentPrice = GetTicker().Last; //当前价格
-    if (asset.isOpenmore && (gyma7 <= -3.5)) {
+    if (asset.isOpenmore && ((gyma7 <= -3.5))) {
         exchange.SetDirection("closebuy")
         Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
-
+        Log('开多盈利离场', currrentPrice - asset.openprice, '@');
         var buyid = exchange.Sell(currrentPrice - 1, asset.amount)
         if (buyid) {
             exchange.CancelOrder(buyid)
         }
     } else if ((gysum >= 3.5)) {
         exchange.SetDirection("closesell")
+        Log('开空盈利离场',asset.openprice - currrentPrice, '@');
+
         var buyid = exchange.Buy(currrentPrice + 1, asset.amount)
         if (buyid) {
             exchange.CancelOrder(buyid)
@@ -590,6 +592,38 @@ function closeAction() {
         Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
 
     }
+    
+    if (asset.isOpenmore ) {
+        var diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
+        if ((currrentPrice < asset.openprice) && (diff >= (2.8 * asset.amount))) {
+            Log('开多止损离场', diff, '@');
+            exchange.SetDirection("closebuy")
+            Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
+
+            var buyid = exchange.Sell(currrentPrice - 1, asset.amount)
+            if (buyid) {
+                exchange.CancelOrder(buyid)
+            }
+            Sleep(1000 * 60 * 8);//止损休眠
+        }
+
+    } else {
+        var diff = (currrentPrice - asset.openprice) / asset.openprice * currrentPrice * asset.amount;
+        if ((currrentPrice > asset.openprice) && (diff >= (2.8 * asset.amount))) {
+            Log('开空止损离场', diff, '@');
+
+            exchange.SetDirection("closesell")
+            var buyid = exchange.Buy(currrentPrice + 1, asset.amount)
+            if (buyid) {
+                exchange.CancelOrder(buyid)
+            }
+            Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
+            Sleep(1000 * 60 * 8);//止损休眠
+        }
+
+
+    }
+    
     Sleep(1000 * 20);
 
 }
