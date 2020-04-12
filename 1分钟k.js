@@ -13,19 +13,15 @@ var Warning = '#f0ad4e'; //警告颜色
 var runTime;
 
 const BOLLEnum = {
-    aboveUpline: 'aboveUpline',
-    abovemidLine: 'abovemidLine',
-    abovedownLine: 'abovedownLine',
+    aboveUpline: 'aboveUpline',//上轨之上
+    abovemidLine: 'abovemidLine',//中轨之上
+    abovedownLine: 'abovedownLine',//下轨之上
     throughUpline: 'throughUpline', //突破上轨
-    //throughHighUpline: 'throughHighUpline',////假突破上轨
     throughmidLine: 'throughmidLine', //突破中轨
-    //throughHighdownLine: 'throughHighdownLine',//假突破中轨
     throughdownLine: 'throughdownLine', //突破下轨
-    underUpline: 'underUpline', //上轨之下
-    undermidLine: 'undermidLine', //中轨之下
-    underdownLine: 'underdownLine', //下轨之下
-    //beLowUpLine:'beLowmidLine',
-    //beLowmidLine: 'beLowmidLine',////下轨之下
+    underUpline: 'underUpline', //下穿上轨
+    undermidLine: 'undermidLine', //下穿中轨
+    underdownLine: 'underdownLine', //下穿下轨
     beLowdownLine: 'beLowdownLine', ////下轨之下
 
 }
@@ -86,8 +82,28 @@ function BOLLCheck() {
         var prebollEnum2 = calcuetLine(OpenPrice2, ClosePrice2, preupLine2, premidLine2, predownLine2);
         //        return {bollEnum:bollEnum,prebollEnum:prebollEnum,prebollEnum2:prebollEnum2};
 
-        if (bollEnum == BOLLEnum.throughdownLine && (prebollEnum == BOLLEnum.throughdownLine || prebollEnum == BOLLEnum.throughdownLine) && (prebollEnum2.throughdownLine || prebollEnum2.beLowdownLine)) {
-            return 1.5;
+        if (bollEnum == BOLLEnum.throughdownLine && (prebollEnum == BOLLEnum.throughdownLine || prebollEnum == BOLLEnum.beLowdownLine) && (prebollEnum2.throughdownLine || prebollEnum2.beLowdownLine)) {
+            return 2.1;
+        }
+        
+        if (bollEnum == BOLLEnum.beLowdownLine && (prebollEnum == BOLLEnum.throughdownLine || prebollEnum == BOLLEnum.beLowdownLine) && (prebollEnum2.throughdownLine || prebollEnum2.beLowdownLine)) {
+            return -2.1;
+        }
+        
+        if (bollEnum == BOLLEnum.underUpline && (prebollEnum == BOLLEnum.aboveUpline || prebollEnum == BOLLEnum.underUpline) && (prebollEnum2.aboveUpline || prebollEnum2.underUpline)) {
+            return -2;
+        }
+        
+        if (bollEnum == BOLLEnum.underUpline && (prebollEnum == BOLLEnum.aboveUpline || prebollEnum == BOLLEnum.underUpline || prebollEnum == BOLLEnum.abovemidLine) && (prebollEnum2.aboveUpline || prebollEnum2.underUpline || prebollEnum2 == BOLLEnum.abovemidLine)) {
+            return -2.3;
+        }
+        
+        if (bollEnum == BOLLEnum.throughmidLine && (prebollEnum == BOLLEnum.abovedownLine || prebollEnum == BOLLEnum.throughmidLine ) && (prebollEnum2.abovedownLine || prebollEnum2.throughmidLine)) {
+            return 2;
+        }
+        
+        if (bollEnum == BOLLEnum.underdownLine && (prebollEnum == BOLLEnum.underdownLine ) && (prebollEnum2.underdownLine)) {
+            return -2.5;
         }
     }
     return 0;
@@ -137,9 +153,92 @@ function calcuetLine(OpenPrice2, ClosePrice2, preupLine2, premidLine2, predownLi
     if (OpenPrice2 < predownLine2 && ClosePrice2 < predownLine2) {
         return BOLLEnum.beLowdownLine;
     }
-    Log(calcuetLine失败)
-    return nil;
+    Log('calcuetBollLine失败')
+    return "nil";
 }
+
+function MACDC() {
+    var records = exchange.GetRecords(PERIOD_M1);
+    if (!records) {
+        return 0;
+    }
+    var macd = TA.MACD(records)
+    var mcdArray = new Array();
+    var firstBuy = false;
+    var firstSell = false;
+    for (var i = 0; i < 2; i++) {
+        var model = {
+            m: 0,
+            c: 0,
+            d: 0
+        };
+        model.m = macd[0][records.length - i - 1];
+        model.c = macd[1][records.length - i - 1];
+        model.d = macd[2][records.length - i - 1];
+        mcdArray.push(model);
+    }
+    
+    var firstModel = mcdArray[0];
+    var secondeModel = mcdArray[0];
+//    var thirdeModel = mcdArray[0];
+    
+    if ((firstModel.m >= 0.2 && firstModel.c >= 0.2 && firstModel.d > 0) && (secondeModel.m >= 0.2 && secondeModel.c >= 0.2  && secondeModel.d > 0)) {
+        return -3;
+    }
+    
+    if ((firstModel.m >= 0.2 && firstModel.c >= 0.2) && (secondeModel.m >= 0.2 && secondeModel.c >= 0.2)) {
+        return -2.5;
+    }
+    
+    if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 ) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2)) {
+        return 2.5;
+    }
+    
+    
+    if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d < 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2  && secondeModel.d < 0)) {
+        return 3;
+    }
+    
+    if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d > 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2)) {
+        return 2.5;
+    }
+    
+//    if ((firstModel.m >= 0.2 && firstModel.c >= 0.2 && firstModel.d < 0) && (secondeModel.m >= 0.2 && secondeModel.c >= 0.2)) {
+//        return -2.5;
+//    }
+    
+    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (firstModel.m <= -0.1 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0)) {
+        return 1.5;
+    }
+    
+    if ((firstModel.m <= 0.2 && firstModel.m >= 0 && firstModel.c <= 0.2 && firstModel.c >= 0.1 && firstModel.d < 0) && (secondeModel.m <= 0.2 && secondeModel.m >= 0.1 && secondeModel.c <= 0.2 && secondeModel.c >= 0.1 && secondeModel.d < 0)) {
+        return -1.5;
+    }
+    
+    if ((firstModel.m < 0 && firstModel.m >= -0.1 && firstModel.c >= -0.1 && firstModel.c < 0 && firstModel.d > 0) && (secondeModel.m < 0 && secondeModel.m >= -0.1 && secondeModel.c >= -0.1 && secondeModel.c < 0)) {
+        return 1;
+    }
+    
+    if ((firstModel.m > 0 && firstModel.m <= 0.1 && firstModel.c <= 0.1 && firstModel.c > 0 && firstModel.d < 0) && (secondeModel.m > 0 && secondeModel.m < 0.1 && secondeModel.c <= 0.1 && secondeModel.c > 0)) {
+        return -1;
+    }
+    
+//    if ((firstModel.m >= 2 && firstModel.c >= 2 && firstModel.d > 0) && (secondeModel.m >= 2 && secondeModel.c >= 2  && secondeModel.d > 0)) {
+//        return -3;
+//    }
+    
+    return 0;
+
+}
+
+//function checkMACDValue(model,conditions1,conditions2,conditions3) {
+//
+//    if (model.m > conditions1) {
+//        return true
+//    }
+//
+//    return false;
+//}
 
 function MACheck() {
     var records = exchange.GetRecords(PERIOD_M1);
@@ -165,25 +264,31 @@ function MACheck() {
     var sellCount = 0
     for (var i = 0; i < mcdArray.length; i++) {
         var model = mcdArray[i];
-       if ((model.d > 0) && (model.m < 0) && (model.c < 0) && (model.m > model.c)) {
-           // if ((model.d > 0)) {
+       //if ((model.d > 0) && (model.m < 0) && (model.c < 0) && (model.m > model.c)) {
+            if ((model.d > 0)) {
 
             buyCount += 1;
             if (i == 0) {
                 firstBuy = true;
             }
+                  if ((model.m > 0.25 && model.c > 0.2 )||( model.m < 0.08 && model.c < 0.06 && model.m > -0.1 && model.c < 0.12)) {
+                firstBuy = false;
+                }
             //            if (mcdArray[0].d - mcdArray[1].d < 0.02) {
             //                buyCount = 0;
             //            }
         }
 
-        if ((model.d < 0) && (model.m > 0) && (model.c > 0) && (model.m < model.c)) {
-        //if ((model.d < 0)) {
+        //if ((model.d < 0) && (model.m > 0) && (model.c > 0) && (model.m < model.c)) {
+        if ((model.d < 0)) {
 
             sellCount = sellCount + 1;
             if (i == 0) {
                 firstSell = true;
             }
+            if (model.m > -0.25 && model.c > -0.2 &&  model.m < 0.15 && model.c  < 0.1) {
+                firstSell = false;
+                }
             //            if (mcdArray[0].d - mcdArray[1].d < -0.02) {
             //                sellCount = 0;
             //            }
@@ -398,12 +503,12 @@ function isCanClose() {
          */
                 var diff = (currrentPrice - asset.openprice) / asset.openprice * currrentPrice * asset.amount;
 
-        if (ma7 < 0 && ((diff <= -1.2) || diff > 0.3)) {
+        if (ma7 < 0 && ((diff <= -1.2) || diff > 0)) {
             Log('开多ma7', ma7, '盈利', diff, '@');
             return 2;
         }
 
-        if (diff >= 2.5) {
+        if (diff >= 2) {
             Log('开多盈利离场', diff, '@');
             return 2;
         }
@@ -424,7 +529,7 @@ function isCanClose() {
     } else {
                 var diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
 
-        if (ma7 > 0 && ((diff <= -1.2) || diff > 0.3)) {
+        if (ma7 > 0 && ((diff <= -1.2) || diff)) {
             Log('开空ma7', ma7, '盈利', diff, '@');
             return 2;
         }
@@ -445,7 +550,7 @@ function isCanClose() {
          }
          */
 
-        if (diff >= 2.5) {
+        if (diff >= 2) {
             Log('开空获利离场', diff, '@');
             return 2;
         }
@@ -468,18 +573,22 @@ function isCanClose() {
 
 function closeAction() {
     var currrentPrice = GetTicker().Last; //当前价格
-    if (asset.isOpenmore) {
+    if (asset.isOpenmore && (gyma7 <= -3.5)) {
         exchange.SetDirection("closebuy")
+        Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
+
         var buyid = exchange.Sell(currrentPrice - 1, asset.amount)
         if (buyid) {
             exchange.CancelOrder(buyid)
         }
-    } else {
+    } else if ((gysum >= 3.5)) {
         exchange.SetDirection("closesell")
         var buyid = exchange.Buy(currrentPrice + 1, asset.amount)
         if (buyid) {
             exchange.CancelOrder(buyid)
         }
+        Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
+
     }
     Sleep(1000 * 20);
 
@@ -544,11 +653,13 @@ function RuningTime() {
     return ret;
 }
 
+                           
+                             
 function AppendedStatus() {
     var accountTable = {
         type: "table",
         title: "币种信息",
-        cols: ["运行时间","开仓方向", "开仓价格", "当前价格", "盈利信息"],
+        cols: ["运行时间","开仓方向", "开仓价格", "当前价格", "盈利信息",'ma7','mcd7', 'bool7','sum'],
         rows: []
     };
     var runday = runTime.dayDiff;
@@ -571,9 +682,20 @@ function AppendedStatus() {
         '$' + asset.openprice,
         '$' + currrentPrice,
         '$' + diff,
+        gyma7,
+        gymcd7,
+        gybool7,
+        gysum,
     ]);
     return runTime.str + '\n' + '`' + JSON.stringify(accountTable) + '`\n' + "更新时间: " + _D() + '\n';
 }
+                             
+
+
+                             var gyma7 = 0;
+                             var gymcd7 = 0;
+                             var gybool7 = 0;
+                             var gysum = 0;
 
 function main() {
     Log(exchange.GetAccount());
@@ -583,39 +705,25 @@ function main() {
 
     while (true) {
         //检查当前是否持仓
+                              gyma7 = ma7Check();
+                              gymcd7 = MACDC();
+                              gybool7 = BOLLCheck();
+                              gysum = gyma7 + gymcd7 + gybool7;
 
         if (!checkAmount()) {
-
-            //确定是否在MACD牛市范围
-            var result = MACheck();
-                             var ma7 = ma7Check()
-            if (result === 1) {
-                             Log('多'+ma7);
-                if (ma7 > 0) {
-                    openAction("buy")
-                    Log('开多ma7', ma7, '@');
-
-                }
-
-            } else if (result === -1) {
-                             Log('空'+ma7);
-                if (ma7 < 0) {
-
-                    openAction("sell")
-                    Log('开空ma7', ma7, '@');
-
-                }
-            }
+             
+             if (gysum >= 4.5) {
+             openAction("buy")
+             Log('开多ma7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
+             
+             }
+             
+             if (gysum <= -4.5) {
+             openAction("sell")
+             Log('开空ma7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
+             }
         } else {
-            //加仓操作
-            //            if (isCanClose() == 1) {
-            //                openAction(asset.type)
-            //            } else  {
-            //平仓操作
-            if (isCanClose() == 2) {
                 closeAction()
-            }
-            //            }
 
         }
         runTime = RuningTime();
@@ -623,8 +731,10 @@ function main() {
 
 
         //等待下次查询交易所
-        Sleep(1000 * 10);
+        Sleep(1000 * 2);
 
     }
 }
+
+
 
