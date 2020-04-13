@@ -409,6 +409,7 @@ function checkAmount() {
         } else if (position[0].Type == 1) {
             asset.isOpenmore = false;
         }
+        Stocks_ = position[0].Margin
         asset.openprice = position[0].Price;
         asset.amount = position[0].Amount
         return true;
@@ -573,7 +574,11 @@ function isCanClose() {
 
 function closeAction() {
     var currrentPrice = GetTicker().Last; //当前价格
-    if (asset.isOpenmore && ((gyma7 <= -3.5))) {
+     var account = exchange.GetAccount();
+//    var total_balance = _N(parseFloat(account.Info.totalWalletBalance), 2);
+                            // Log(total_balance)
+    blance_ = account.Balance;
+    if (asset.isOpenmore && ((gysum <= -3.5))) {
         exchange.SetDirection("closebuy")
         Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
         Log('开多盈利离场', currrentPrice - asset.openprice, '@');
@@ -581,7 +586,7 @@ function closeAction() {
         if (buyid) {
             exchange.CancelOrder(buyid)
         }
-    } else if ((gysum >= 3.5)) {
+    } else if (!asset.isOpenmore && (gysum >= 3.5)) {
         exchange.SetDirection("closesell")
         Log('开空盈利离场',asset.openprice - currrentPrice, '@');
 
@@ -590,7 +595,6 @@ function closeAction() {
             exchange.CancelOrder(buyid)
         }
         Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
-
     }
     
     if (asset.isOpenmore ) {
@@ -604,7 +608,7 @@ function closeAction() {
             if (buyid) {
                 exchange.CancelOrder(buyid)
             }
-            Sleep(1000 * 60 * 8);//止损休眠
+            Sleep(1000 * 60 * 30);//止损休眠
         }
 
     } else {
@@ -618,14 +622,12 @@ function closeAction() {
                 exchange.CancelOrder(buyid)
             }
             Log('closema7:', gyma7 ,'mcd7:',gymcd7,'bool7:',gybool7,'sum:',gysum,'@');
-            Sleep(1000 * 60 * 8);//止损休眠
+            Sleep(1000 * 60 * 30);//止损休眠
         }
 
 
     }
     
-    Sleep(1000 * 20);
-
 }
 
 function openAction(type) {
@@ -693,7 +695,7 @@ function AppendedStatus() {
     var accountTable = {
         type: "table",
         title: "币种信息",
-        cols: ["运行时间","开仓方向", "开仓价格", "当前价格", "盈利信息",'ma7','mcd7', 'bool7','sum'],
+        cols: ["运行时间",'初始资金','盈利资金',"开仓方向", "开仓价格", "当前价格", "盈利信息",'ma7','mcd7', 'bool7','sum'],
         rows: []
     };
     var runday = runTime.dayDiff;
@@ -708,14 +710,19 @@ function AppendedStatus() {
     //     var dayProfit = totalProfit / runday; //天盈利
     //     var dayRate = dayProfit / funding * 100;
     var currrentPrice = GetTicker().Last; //当前价格
-    var diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
-
+    var diff = _N(((asset.openprice - currrentPrice) / asset.openprice) * currrentPrice * asset.amount,2);
+    if (asset.isOpenmore) {
+        diff = _N(((currrentPrice - asset.openprice) / asset.openprice) * currrentPrice * asset.amount,2);
+    }
+    var gyBlance = _N(parseFloat(blance_ + Stocks_  - initBlance),2);
     accountTable.rows.push([
         runday,
-        '$' + (asset.isOpenmore ? "多" + Success : "空" + Danger),
+        '$' + initBlance,
+        '$' + gyBlance + (((blance_ + Stocks_  - initBlance) >= 0) ?  Success :  Danger),
+        (asset.isOpenmore ? "多" + Success : "空" + Danger),
         '$' + asset.openprice,
         '$' + currrentPrice,
-        '$' + diff,
+        '$' + diff + Success,
         gyma7,
         gymcd7,
         gybool7,
@@ -731,19 +738,40 @@ function AppendedStatus() {
                              var gybool7 = 0;
                              var gysum = 0;
 
+var blance_ = 0;
+    var initBlance = 527.43;
+var Stocks_ = 0;
+
+ function caclueProfile() {
+     var position = exchange.GetPosition()
+     if (position.length > 0) {
+         var currrentPrice = GetTicker().Last; //当前价格
+         Stocks_ = position[0].Margin
+     } else {
+         Stocks_ = 0;
+     }
+     var account = exchange.GetAccount();
+     blance_ = account.Balance;
+     LogProfit(blance_ + Stocks_ - initBlance);
+     
+ }
+
 function main() {
-    Log(exchange.GetAccount());
+
     exchange.SetContractType("swap")
     exchange.SetMarginLevel(10)
     exchange.IO("currency", "BSV_USDT")
-
+    var account = exchange.GetAccount();
+//    var total_balance = _N(parseFloat(account.Info.totalWalletBalance), 2);
+                            // Log(total_balance)
+    blance_ = account.Balance;
+    var count = 0;
     while (true) {
-        //检查当前是否持仓
-                              gyma7 = ma7Check();
-                              gymcd7 = MACDC();
-                              gybool7 = BOLLCheck();
-                              gysum = gyma7 + gymcd7 + gybool7;
-
+          gyma7 = ma7Check();
+          gymcd7 = MACDC();
+          gybool7 = BOLLCheck();
+          gysum = gyma7 + gymcd7 + gybool7;
+                            //检查当前是否持仓
         if (!checkAmount()) {
              
              if (gysum >= 4.5) {
@@ -762,13 +790,23 @@ function main() {
         }
         runTime = RuningTime();
         LogStatus(AppendedStatus());
-
+                             
+         if (count >= 200) {
+            count = 0;
+            caclueProfile()
+         }
+          count += 1;
 
         //等待下次查询交易所
         Sleep(1000 * 2);
 
     }
 }
+                             
+
+
+
+
 
 
 

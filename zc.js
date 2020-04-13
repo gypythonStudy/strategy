@@ -1,13 +1,39 @@
 
+/*
+ * @Description: 加分号版,首先这是一个山寨版,添加的功能已经在下面,没有动过逻辑上的内容
+ * @Version: 0.0.3
+ * @Author: RedSword
+ * @Email: redsword@gamil.com
+ * @Date: 2020-04-10 11:48:38
+ * @LastEditors: HomeRedsword
+ * @LastEditTime: 2020-04-12 21:27:45
+ *
+ * 添加功能
+ *
+ * 2020-04-12
+ * 1.添加了最大开仓量限制,0为不限制
+ * 2.持仓价值显示绝对值,不显负号
+ * 3.显示当前币种杠杆倍数和持仓强平价格
+ * 4.添加币种的开仓模式,全仓或者逐仓
+ * 5.修正重置不起作用的BUG
+ * 6.修改运行时间不准的BUG
+ * 7.修改保证金显示,和官方一至
+ * 8.保证金不显示比例,改为比率,和官方一至
+ *
+ * 2020-04-10
+ * 1.给强迫症加了分号
+ * 2.添加了盈利统计
+ * 3.添加了开仓方向,并对持仓方向和持仓盈亏做了颜色区分
+ */
 
-Alpha = 0.03; //指数移动平局的Alpha参数，设置的越大，基准价格跟踪越敏感，最终持仓也会越低，降低了杠杆，但会降低收益，具体需要根据回测结果自己权衡
-Update_base_price_time_interval = 30 * 60; //多久更新一次基准价格, 单位秒，和Alpha参数相关,Alpha 设置的越小，这个间隔也可以设置的更小var
-
-var funding = 0; //期货账户开始金额
+var Alpha = 0.03; //指数移动平局的Alpha参数，设置的越大，基准价格跟踪越敏感，最终持仓也会越低，降低了杠杆，但会降低收益，具体需要根据回测结果自己权衡
+var Update_base_price_time_interval = 30 * 60; //多久更新一次基准价格, 单位秒，和Alpha参数相关,Alpha 设置的越小，这个间隔也可以设置的更小var
+var Max_amount = 0; //最大开仓量,0为不限制
+var funding = 0; //账户初始金额,为0的时候,自动获取,非0为自定义
 var Success = '#5cb85c'; //成功颜色
 var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
-var runTime;
+var runTime; //运行时间
 
 if (IsVirtual()) {
     throw '不能回测，回测参考 https://www.fmz.com/digest-topic/5294 ';
@@ -21,6 +47,7 @@ var index = 1; //指数
 if (trade_symbols.indexOf('BTC') < 0) {
     symbols = trade_symbols.concat(['BTC']);
 }
+// Log(symbols);
 var update_profit_time = 0;
 var update_base_price_time = Date.now();
 var assets = {};
@@ -46,7 +73,10 @@ for (var i = 0; i < exchange_info.symbols.length; i++) {
             btc_diff: 0,
             realised_profit: 0,
             margin: 0,
-            unrealised_profit: 0
+            unrealised_profit: 0,
+            leverage: 20,
+            positionInitialMargin: 0,
+            liquidationPrice: 0
         };
         trade_info[exchange_info.symbols[i].baseAsset] = {
             minQty: parseFloat(exchange_info.symbols[i].filters[1].minQty),
@@ -58,10 +88,11 @@ for (var i = 0; i < exchange_info.symbols.length; i++) {
 assets.USDT = {
     unrealised_profit: 0,
     margin: 0,
-    margin_balance: 0,
+    margin_balance: 0, //保证金余额
     total_balance: 0,
     leverage: 0,
-    update_time: 0
+    update_time: 0,
+    margin_ratio: 0
 };
 
 function updateAccount() { //更新账户和持仓
@@ -77,22 +108,28 @@ function updateAccount() { //更新账户和持仓
         assets[trade_symbols[i]].unrealised_profit = 0;
         assets[trade_symbols[i]].hold_price = 0;
         assets[trade_symbols[i]].amount = 0;
-        assets[trade_symbols[i]].unrealised_profit = 0;
     }
+    // Log(account.Info.positions);
     for (var j = 0; j < account.Info.positions.length; j++) {
         var pair = account.Info.positions[j].symbol;
         var coin = pair.slice(0, pair.length - 4);
+        // if (pair === 'BTCUSDT') {
+        //     Log(coin, account.Info.positions[j]);
+        // }
         if (symbols.indexOf(coin) < 0) {
             continue;
         }
         assets[coin].margin = parseFloat(account.Info.positions[j].initialMargin) + parseFloat(account.Info.positions[j].maintMargin);
         assets[coin].unrealised_profit = parseFloat(account.Info.positions[j].unrealizedProfit);
+        assets[coin].positionInitialMargin = parseFloat(account.Info.positions[j].positionInitialMargin);
+        assets[coin].leverage = account.Info.positions[j].leverage;
     }
     assets.USDT.margin = _N(parseFloat(account.Info.totalInitialMargin) + parseFloat(account.Info.totalMaintMargin), 2);
     assets.USDT.margin_balance = _N(parseFloat(account.Info.totalMarginBalance), 2);
     assets.USDT.total_balance = _N(parseFloat(account.Info.totalWalletBalance), 2);
     assets.USDT.unrealised_profit = _N(parseFloat(account.Info.totalUnrealizedProfit), 2);
     assets.USDT.leverage = _N(assets.USDT.margin / assets.USDT.total_balance, 2);
+    assets.USDT.margin_ratio = (account.Info.totalMaintMargin / account.Info.totalMarginBalance * 100);
     pos = JSON.parse(exchange.GetRawJSON());
     if (pos.length > 0) {
         for (var k = 0; k < pos.length; k++) {
@@ -104,6 +141,9 @@ function updateAccount() { //更新账户和持仓
             assets[coin].hold_price = parseFloat(pos[k].entryPrice);
             assets[coin].amount = parseFloat(pos[k].positionAmt);
             assets[coin].unrealised_profit = parseFloat(pos[k].unRealizedProfit);
+            assets[coin].liquidationPrice = parseFloat(pos[k].liquidationPrice);
+            assets[coin].marginType = pos[k].marginType;
+
         }
     }
 }
@@ -117,6 +157,9 @@ function updateIndex() { //更新指数
         }
         Log('保存启动时的价格');
         _G('init_prices', init_prices);
+        _G("StartTime", null);
+        _G("initialAccount_" + exchange.GetLabel());
+
     } else {
         init_prices = _G('init_prices');
         if (Date.now() - update_base_price_time > Update_base_price_time_interval * 1000) {
@@ -169,8 +212,6 @@ function updateTick() { //更新行情
     }
 }
 
-
-
 function trade(symbol, dirction, value) { //交易
     if (Date.now() - assets.USDT.update_time > 10 * 1000) {
         Log('更新账户延时，不交易');
@@ -214,9 +255,7 @@ function StartTime() {
 function RuningTime() {
     var ret = {};
     var dateBegin = new Date(StartTime());
-    var dateEnd = new Date();
-    var tmpHours = dateEnd.getHours();
-    //dateEnd.setHours(tmpHours + 8); //时区+8
+    var dateEnd = new Date(_D());
     var dateDiff = dateEnd.getTime() - dateBegin.getTime();
     var dayDiff = Math.floor(dateDiff / (24 * 3600 * 1000));
     var leave1 = dateDiff % (24 * 3600 * 1000);
@@ -234,12 +273,15 @@ function AppendedStatus() {
     var accountTable = {
         type: "table",
         title: "盈利统计",
-        cols: ["运行天数", "初始资金", "指数", "保证金余额", "已用保证金比例", "钱包余额", "已用保证金", "未实现盈利", "总收益率", "预计年化", "预计月化", "平均日化"],
+        cols: ["天数", "指数", "初始资金", "现有资金", "保证金余额", "已用保证金", "保证金比率", "未实现盈利", "总收益", "预计年化", "预计月化", "平均日化"],
         rows: []
     };
     var runday = runTime.dayDiff;
     if (runday == 0) {
         runday = 1;
+    }
+    if (funding == 0) {
+        funding = FirstAccount().Balance;
     }
     var profitColors = Danger;
     var totalProfit = assets.USDT.total_balance - funding; //总盈利
@@ -250,12 +292,14 @@ function AppendedStatus() {
     var dayRate = dayProfit / funding * 100;
     accountTable.rows.push([
         runday,
-        '$' + 500,
         index,
-        '$' + assets.USDT.margin_balance,
-        assets.USDT.leverage,
+        //'$' + _N(funding, 2),
+        '$' + 500,
         '$' + assets.USDT.total_balance,
+        '$' + assets.USDT.margin_balance,
         '$' + assets.USDT.margin,
+        _N(assets.USDT.margin_ratio, 2) + '%',
+
         '$' + _N(assets.USDT.unrealised_profit, 2) + (assets.USDT.unrealised_profit >= 0 ? Success : Danger),
         _N(totalProfit / funding * 100, 2) + "% = $" + _N(totalProfit, 2) + (profitColors),
         _N(dayRate * 365, 2) + "% = $" + _N(dayProfit * 365, 2) + (profitColors),
@@ -269,17 +313,30 @@ function updateStatus() { //状态栏信息
     var table = {
         type: 'table',
         title: '交易对信息',
-        cols: ['编号', '币种信息', '挂仓方向', '开仓数量', '持仓价格', '当前价格', '偏离平均', '持仓价值', '保证金', '未实现盈亏'],
+        cols: ['编号', '[模式][倍数]币种信息', '开仓方向', '开仓数量', '持仓价格', '当前价格', '强平价格', '偏离平均', '持仓价值', '保证金', '未实现盈亏'],
         rows: []
     };
     for (var i = 0; i < symbols.length; i++) {
         var direction = '空仓';
+        // Log(assets);
         if (assets[symbols[i]].amount != 0) {
             direction = assets[symbols[i]].amount > 0 ? '做多' + Success : '做空' + Danger;
         }
         var price = _N((assets[symbols[i]].ask_price + assets[symbols[i]].bid_price) / 2, trade_info[symbols[i]].priceSize);
         var value = _N((assets[symbols[i]].ask_value + assets[symbols[i]].bid_value) / 2, 2);
-        var infoList = [i + 1, symbols[i], direction, Math.abs(assets[symbols[i]].amount), assets[symbols[i]].hold_price, price, assets[symbols[i]].btc_diff, value, _N(assets[symbols[i]].margin, 3), _N(assets[symbols[i]].unrealised_profit, 3) + (assets[symbols[i]].unrealised_profit >= 0 ? Success : Danger)];
+        var infoList = [
+            i + 1,
+            "[" + (assets[symbols[i]].marginType == 'cross' ? '全仓' : '逐仓') + "] [" + assets[symbols[i]].leverage + 'x] ' + symbols[i],
+            direction,
+            Math.abs(assets[symbols[i]].amount),
+            assets[symbols[i]].hold_price,
+            price,
+            assets[symbols[i]].liquidationPrice + Warning,
+            assets[symbols[i]].btc_diff,
+            Math.abs(value),
+            _N(assets[symbols[i]].positionInitialMargin, 2),
+            _N(assets[symbols[i]].unrealised_profit, 3) + (assets[symbols[i]].unrealised_profit >= 0 ? Success : Danger)
+        ];
         table.rows.push(infoList);
     }
     // var logString = _D() + '   ' + JSON.stringify(assets.USDT) + ' Index:' + index + '\n';
@@ -289,6 +346,7 @@ function updateStatus() { //状态栏信息
         LogProfit(_N(assets.USDT.margin_balance, 3));
         update_profit_time = Date.now();
     }
+
 }
 
 function onTick() { //策略逻辑部分
@@ -297,11 +355,11 @@ function onTick() { //策略逻辑部分
         if (assets[symbol].ask_price == 0) {
             continue;
         }
-        var aim_value = -Trade_value * _N(assets[symbol].btc_diff / 0.01, 1);
-        if (aim_value - assets[symbol].ask_value > Adjust_value) {
+        var aim_value = -Trade_value * _N(assets[symbol].btc_diff / 0.01, 3);
+        if (aim_value - assets[symbol].ask_value > Adjust_value && (assets[symbol].ask_value < Max_amount || Max_amount == 0)) {
             trade(symbol, 'buy', aim_value - assets[symbol].ask_value);
         }
-        if (aim_value - assets[symbol].bid_value < -Adjust_value) {
+        if (aim_value - assets[symbol].bid_value < -Adjust_value && (assets[symbol].bid_value < Max_amount || Max_amount == 0)) {
             trade(symbol, 'sell', -(aim_value - assets[symbol].bid_value));
         }
     }
@@ -311,7 +369,6 @@ function main() {
     SetErrorFilter("502:|503:|tcp|character|unexpected|network|timeout|WSARecv|Connect|GetAddr|no such|reset|http|received|EOF|reused|Unknown");
     while (true) {
         runTime = RuningTime();
-        funding = FirstAccount().Balance;
         updateAccount();
         updateTick();
         onTick();
