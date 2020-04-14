@@ -1,14 +1,23 @@
 
 /*
  * @Description: 加分号版,首先这是一个山寨版,添加的功能已经在下面,没有动过逻辑上的内容
- * @Version: 0.0.3
+ * @Version: 0.0.6
  * @Author: RedSword
  * @Email: redsword@gamil.com
  * @Date: 2020-04-10 11:48:38
- * @LastEditors: HomeRedsword
- * @LastEditTime: 2020-04-12 21:27:45
+ * @LastEditors: company-redsword
+ * @LastEditTime: 2020-04-13 16:04:30
+ *
+ * 运行之前,一定要仔细的看草神的文章,地址 https://www.fmz.com/strategy/195226
  *
  * 添加功能
+ *
+ * 2020-04-13
+ * 1.添加交易相关的统计,感谢豆子开源的代码
+ * 2.带预估字样的,都是不准的,只能做大概的参考
+ * 3.加入草神最新的止损逻辑
+ * 4.删除原有Max_amount的止损方法
+ * 5.添加显示绝对收益的开关
  *
  * 2020-04-12
  * 1.添加了最大开仓量限制,0为不限制
@@ -27,13 +36,30 @@
  */
 
 var Alpha = 0.03; //指数移动平局的Alpha参数，设置的越大，基准价格跟踪越敏感，最终持仓也会越低，降低了杠杆，但会降低收益，具体需要根据回测结果自己权衡
-var Update_base_price_time_interval = 30 * 60; //多久更新一次基准价格, 单位秒，和Alpha参数相关,Alpha 设置的越小，这个间隔也可以设置的更小var
-var Max_amount = 0; //最大开仓量,0为不限制
-var funding = 0; //账户初始金额,为0的时候,自动获取,非0为自定义
+var Update_base_price_time_interval = 30 * 60; //多久更新一次基准价格, 单位秒，和Alpha参数相关,Alpha 设置的越小，这个间隔也可以设置的更小
+
+
+//Stop_loss设置为0.8表示当资金达到低于初始资金的80%时，止损，清空所有仓位，停止策略。
+//随着策略运行，Stop_loss可以设置大于1（重启生效），比如从1000赚到1500，Stop_loss设置为1.3，则回撤到1300元止损。不想止损可以把这个参数设置的很小。
+//风险是大家都用这种止损会形成踩踏，加大亏损。
+//初始资金在状态栏的init_balance字段，注意提现等操作会影响，别不小心止损了。
+//如果还是怕黑天鹅事件，比如某个币归0等，可以手动提现出来。
+
+var Stop_loss = 0.8;
+var Max_diff = 0.4; //当偏差diff大于0.4时，不继续加空仓, 自行设置
+var Min_diff = -0.3; //当diff小于-0.3时，不继续加多仓, 自行设置
+
+var Version = '0.0.6';
+var Show = false; //默认为false累计收益显示是账户余额,改为true累计收益显示为收益,如果之前是显示的账户余额,你使用LogProfitReset()来清空图表
+var Funding = 0; //账户初始金额,为0的时候,自动获取,非0为自定义
 var Success = '#5cb85c'; //成功颜色
 var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
-var runTime; //运行时间
+var RunTime; //运行时间
+var SelfFee = '0.04'; //https://www.binance.com/cn/fee/futureFee
+var TotalLong;
+var TotalShort;
+var UpProfit = 0;
 
 if (IsVirtual()) {
     throw '不能回测，回测参考 https://www.fmz.com/digest-topic/5294 ';
@@ -47,7 +73,6 @@ var index = 1; //指数
 if (trade_symbols.indexOf('BTC') < 0) {
     symbols = trade_symbols.concat(['BTC']);
 }
-// Log(symbols);
 var update_profit_time = 0;
 var update_base_price_time = Date.now();
 var assets = {};
@@ -88,11 +113,14 @@ for (var i = 0; i < exchange_info.symbols.length; i++) {
 assets.USDT = {
     unrealised_profit: 0,
     margin: 0,
-    margin_balance: 0, //保证金余额
+    margin_balance: 0,
     total_balance: 0,
     leverage: 0,
     update_time: 0,
-    margin_ratio: 0
+    margin_ratio: 0,
+    init_balance: 0,
+    stop_balance: 0,
+    profit: 0
 };
 
 function updateAccount() { //更新账户和持仓
@@ -109,23 +137,29 @@ function updateAccount() { //更新账户和持仓
         assets[trade_symbols[i]].hold_price = 0;
         assets[trade_symbols[i]].amount = 0;
     }
-    // Log(account.Info.positions);
     for (var j = 0; j < account.Info.positions.length; j++) {
-        var pair = account.Info.positions[j].symbol;
-        var coin = pair.slice(0, pair.length - 4);
-        // if (pair === 'BTCUSDT') {
-        //     Log(coin, account.Info.positions[j]);
-        // }
-        if (symbols.indexOf(coin) < 0) {
-            continue;
+        if (account.Info.positions[j].positionSide == 'BOTH') {
+            var pair = account.Info.positions[j].symbol;
+            var coin = pair.slice(0, pair.length - 4);
+            if (symbols.indexOf(coin) < 0) {
+                continue;
+            }
+            assets[coin].margin = parseFloat(account.Info.positions[j].initialMargin) + parseFloat(account.Info.positions[j].maintMargin);
+            assets[coin].unrealised_profit = parseFloat(account.Info.positions[j].unrealizedProfit);
+            assets[coin].positionInitialMargin = parseFloat(account.Info.positions[j].positionInitialMargin);
+            assets[coin].leverage = account.Info.positions[j].leverage;
         }
-        assets[coin].margin = parseFloat(account.Info.positions[j].initialMargin) + parseFloat(account.Info.positions[j].maintMargin);
-        assets[coin].unrealised_profit = parseFloat(account.Info.positions[j].unrealizedProfit);
-        assets[coin].positionInitialMargin = parseFloat(account.Info.positions[j].positionInitialMargin);
-        assets[coin].leverage = account.Info.positions[j].leverage;
     }
     assets.USDT.margin = _N(parseFloat(account.Info.totalInitialMargin) + parseFloat(account.Info.totalMaintMargin), 2);
     assets.USDT.margin_balance = _N(parseFloat(account.Info.totalMarginBalance), 2);
+    assets.USDT.total_balance = _N(parseFloat(account.Info.totalWalletBalance), 2);
+    if (assets.USDT.init_balance == 0 && _G('init_balance')) {
+        assets.USDT.init_balance = _N(_G('init_balance'), 2);
+    } else { //初始化init_balance
+        assets.USDT.init_balance = assets.USDT.total_balance;
+        _G('init_balance', assets.USDT.init_balance);
+    }
+    assets.USDT.stop_balance = _N(Stop_loss * assets.USDT.init_balance, 2);
     assets.USDT.total_balance = _N(parseFloat(account.Info.totalWalletBalance), 2);
     assets.USDT.unrealised_profit = _N(parseFloat(account.Info.totalUnrealizedProfit), 2);
     assets.USDT.leverage = _N(assets.USDT.margin / assets.USDT.total_balance, 2);
@@ -138,18 +172,19 @@ function updateAccount() { //更新账户和持仓
             if (symbols.indexOf(coin) < 0) {
                 continue;
             }
+            if (pos[k].positionSide != 'BOTH') {
+                continue;
+            }
             assets[coin].hold_price = parseFloat(pos[k].entryPrice);
             assets[coin].amount = parseFloat(pos[k].positionAmt);
             assets[coin].unrealised_profit = parseFloat(pos[k].unRealizedProfit);
             assets[coin].liquidationPrice = parseFloat(pos[k].liquidationPrice);
             assets[coin].marginType = pos[k].marginType;
-
         }
     }
 }
 
 function updateIndex() { //更新指数
-
     if (!_G('init_prices') || Reset) {
         Reset = false;
         for (var i = 0; i < trade_symbols.length; i++) {
@@ -157,8 +192,14 @@ function updateIndex() { //更新指数
         }
         Log('保存启动时的价格');
         _G('init_prices', init_prices);
-        _G("StartTime", null);
-        _G("initialAccount_" + exchange.GetLabel());
+        _G("StartTime", null); //重置开始时间
+        _G("initialAccount_" + exchange.GetLabel(), null); //重置开始资金
+        _G("tradeNumber", null); //重置交易次数
+        _G("tradeVolume", null); //重置交易量
+        _G("buyNumber", null); //重置做多次数
+        _G("sellNumber", null); //重置做空次数
+        _G("totalProfit", null); //重置打印次数
+        _G("profitNumber", null); //重置盈利次数
 
     } else {
         init_prices = _G('init_prices');
@@ -231,6 +272,13 @@ function trade(symbol, dirction, value) { //交易
     if (id) {
         exchange.CancelOrder(id); //订单会立即撤销
     }
+    tradingCounter("tradeVolume", price * amount); //保存交易量
+    tradingCounter("tradeNumber", 1); //保存交易次数
+    if (dirction == 'buy') {
+        tradingCounter("buyNumber", 1);
+    } else {
+        tradingCounter("sellNumber", 1);
+    }
 }
 
 function FirstAccount() {
@@ -273,68 +321,97 @@ function AppendedStatus() {
     var accountTable = {
         type: "table",
         title: "盈利统计",
-        cols: ["天数", "指数", "初始资金", "现有资金", "保证金余额", "已用保证金", "保证金比率", "未实现盈利", "总收益", "预计年化", "预计月化", "平均日化"],
+        cols: ["运行天数", "指数", "初始资金", "现有资金", "保证金余额", "已用保证金", "保证金比率", "总收益", "预计年化", "预计月化", "平均日化"],
         rows: []
     };
-    var runday = runTime.dayDiff;
+    var feeTable = {
+        type: 'table',
+        title: '交易统计',
+        cols: ["运行天数", '交易次数', '做多次数', '做空次数', '预估胜率', '预估成交额', '预估手续费', "未实现盈利", '持仓总值', '做多总值', '做空总值'],
+        rows: []
+    };
+    var runday = RunTime.dayDiff;
     if (runday == 0) {
         runday = 1;
     }
-    if (funding == 0) {
-        funding = FirstAccount().Balance;
+    if (Funding == 0) {
+        Funding = parseFloat(FirstAccount().Info.totalWalletBalance);
     }
     var profitColors = Danger;
-    var totalProfit = assets.USDT.total_balance - funding; //总盈利
+    var totalProfit = assets.USDT.total_balance - Funding; //总盈利
     if (totalProfit > 0) {
         profitColors = Success;
     }
     var dayProfit = totalProfit / runday; //天盈利
-    var dayRate = dayProfit / funding * 100;
+    var dayRate = dayProfit / Funding * 100;
     accountTable.rows.push([
         runday,
-        index,
-        //'$' + _N(funding, 2),
-        '$' + 500,
+        index, //指数
+        '$' + _N(Funding, 2),
         '$' + assets.USDT.total_balance,
         '$' + assets.USDT.margin_balance,
         '$' + assets.USDT.margin,
         _N(assets.USDT.margin_ratio, 2) + '%',
-
-        '$' + _N(assets.USDT.unrealised_profit, 2) + (assets.USDT.unrealised_profit >= 0 ? Success : Danger),
-        _N(totalProfit / funding * 100, 2) + "% = $" + _N(totalProfit, 2) + (profitColors),
+        _N(totalProfit / Funding * 100, 2) + "% = $" + _N(totalProfit, 2) + (profitColors),
         _N(dayRate * 365, 2) + "% = $" + _N(dayProfit * 365, 2) + (profitColors),
         _N(dayRate * 30, 2) + "% = $" + _N(dayProfit * 30, 2) + (profitColors),
         _N(dayRate, 2) + "% = $" + _N(dayProfit, 2) + (profitColors)
     ]);
-    return runTime.str + '\n' + '`' + JSON.stringify(accountTable) + '`\n' + "更新时间: " + _D() + '\n';
+    var vloume = _G("tradeVolume") ? _G("tradeVolume") : 0;
+    feeTable.rows.push([
+        runday, //运行天数
+        _G("tradeNumber") ? _G("tradeNumber") : 0, //交易次数
+        _G("buyNumber") ? _G("buyNumber") : 0, //做多次数
+        _G("sellNumber") ? _G("sellNumber") : 0, //做空次数
+        _N(_G("profitNumber") / _G("totalProfit") * 100, 2) + '%', //胜率
+        '$' + _N(vloume, 2) + ' ≈ ฿' + _N(vloume / ((assets.BTC.bid_price + assets.BTC.ask_price) / 2), 6), //成交金额
+        '$' + _N(vloume * (SelfFee / 100), 4), //手续费
+        '$' + _N(assets.USDT.unrealised_profit, 2) + (assets.USDT.unrealised_profit >= 0 ? Success : Danger),
+        '$' + _N(TotalLong + Math.abs(TotalShort), 2), //持仓总价值
+        '$' + _N(TotalLong, 2) + Success, //做多总值
+        '$' + _N(Math.abs(TotalShort), 2) + Danger, //做空总值
+    ]);
+    return RunTime.str + '\n' + "更新时间: " + _D() + '\n' + 'Version:' + Version + '\n' + '`' + JSON.stringify(accountTable) + '`\n' + '`' + JSON.stringify(feeTable) + '`\n';
 }
 
 function updateStatus() { //状态栏信息
     var table = {
         type: 'table',
         title: '交易对信息',
-        cols: ['编号', '[模式][倍数]币种信息', '开仓方向', '开仓数量', '持仓价格', '当前价格', '强平价格', '偏离平均', '持仓价值', '保证金', '未实现盈亏'],
+        cols: ['编号', '[模式][倍数]', '币种信息', '开仓方向', '开仓数量', '持仓价格', '当前价格', '强平价格', '持仓价值', '保证金', '偏离平均', '未实现盈亏'],
         rows: []
     };
+    TotalLong = 0;
+    TotalShort = 0;
     for (var i = 0; i < symbols.length; i++) {
         var direction = '空仓';
-        // Log(assets);
+        var margin = direction;
         if (assets[symbols[i]].amount != 0) {
             direction = assets[symbols[i]].amount > 0 ? '做多' + Success : '做空' + Danger;
+            margin = (assets[symbols[i]].marginType == 'cross' ? '全仓' : '逐仓');
         }
+
         var price = _N((assets[symbols[i]].ask_price + assets[symbols[i]].bid_price) / 2, trade_info[symbols[i]].priceSize);
         var value = _N((assets[symbols[i]].ask_value + assets[symbols[i]].bid_value) / 2, 2);
+        if (value != 0) {
+            if (value > 0) {
+                TotalLong += value;
+            } else {
+                TotalShort += value;
+            }
+        }
         var infoList = [
             i + 1,
-            "[" + (assets[symbols[i]].marginType == 'cross' ? '全仓' : '逐仓') + "] [" + assets[symbols[i]].leverage + 'x] ' + symbols[i],
+            "[" + margin + "] [" + assets[symbols[i]].leverage + 'x] ',
+            symbols[i],
             direction,
             Math.abs(assets[symbols[i]].amount),
             assets[symbols[i]].hold_price,
             price,
-            assets[symbols[i]].liquidationPrice + Warning,
-            assets[symbols[i]].btc_diff,
+            assets[symbols[i]].liquidationPrice + Warning, //强平价格
             Math.abs(value),
             _N(assets[symbols[i]].positionInitialMargin, 2),
+            assets[symbols[i]].btc_diff,
             _N(assets[symbols[i]].unrealised_profit, 3) + (assets[symbols[i]].unrealised_profit >= 0 ? Success : Danger)
         ];
         table.rows.push(infoList);
@@ -343,10 +420,62 @@ function updateStatus() { //状态栏信息
     LogStatus(AppendedStatus() + '`' + JSON.stringify(table) + '`');
 
     if (Date.now() - update_profit_time > Log_profit_interval * 1000) {
-        LogProfit(_N(assets.USDT.margin_balance, 3));
+        var balance = assets.USDT.margin_balance;
+        if (Show) {
+            balance = assets.USDT.margin_balance - Funding;
+        }
+        LogProfit(_N(balance, 3));
         update_profit_time = Date.now();
+        if (UpProfit != 0 && (_N(balance, 0) != UpProfit)) { //第一次不计算,并且小数点面的不进行胜率计算
+            tradingCounter("totalProfit", 1); //统计打印次数, 胜率=盈利次数/打印次数*100
+            if (_N(balance, 0) > UpProfit) {
+                tradingCounter("profitNumber", 1); //盈利次数
+            }
+        }
+        UpProfit = _N(balance, 0);
     }
 
+}
+
+function tradingCounter(key, newValue) {
+    var value = _G(key);
+    if (!value) {
+        _G(key, newValue);
+    } else {
+        _G(key, value + newValue);
+    }
+}
+
+function stopLoss() { //止损函数
+    while (true) {
+        if (assets.USDT.margin_balance < Stop_loss * assets.USDT.init_balance && assets.USDT.init_balance > 0) {
+            Log('触发止损，当前资金：', assets.USDT.margin_balance, '初始资金：', assets.USDT.init_balance);
+            Ice_value = 200; //止损的快一些，可修改
+            updateAccount();
+            updateTick();
+            var trading = false; //是否正在交易
+            for (var i = 0; i < trade_symbols.length; i++) {
+                var symbol = trade_symbols[i];
+                if (assets[symbol].ask_price == 0) {
+                    continue;
+                }
+                if (assets[symbol].bid_value >= 15) {
+                    trade(symbol, 'sell', assets[symbol].bid_value);
+                    trading = true;
+                }
+                if (assets[symbol].ask_value <= -15) {
+                    trade(symbol, 'buy', -assets[symbol].ask_value);
+                    trading = true;
+                }
+            }
+            Sleep(1000);
+            if (!trading) {
+                throw '止损结束';
+            }
+        } else { //不用止损
+            return;
+        }
+    }
 }
 
 function onTick() { //策略逻辑部分
@@ -356,10 +485,10 @@ function onTick() { //策略逻辑部分
             continue;
         }
         var aim_value = -Trade_value * _N(assets[symbol].btc_diff / 0.01, 3);
-        if (aim_value - assets[symbol].ask_value > Adjust_value && (assets[symbol].ask_value < Max_amount || Max_amount == 0)) {
+        if (aim_value - assets[symbol].ask_value >= Adjust_value && assets[symbol].btc_diff > Min_diff) {
             trade(symbol, 'buy', aim_value - assets[symbol].ask_value);
         }
-        if (aim_value - assets[symbol].bid_value < -Adjust_value && (assets[symbol].bid_value < Max_amount || Max_amount == 0)) {
+        if (aim_value - assets[symbol].bid_value <= -Adjust_value && assets[symbol].btc_diff < Max_diff) {
             trade(symbol, 'sell', -(aim_value - assets[symbol].bid_value));
         }
     }
@@ -368,9 +497,10 @@ function onTick() { //策略逻辑部分
 function main() {
     SetErrorFilter("502:|503:|tcp|character|unexpected|network|timeout|WSARecv|Connect|GetAddr|no such|reset|http|received|EOF|reused|Unknown");
     while (true) {
-        runTime = RuningTime();
+        RunTime = RuningTime();
         updateAccount();
         updateTick();
+        stopLoss(); //止损
         onTick();
         updateStatus();
         Sleep(Interval * 1000);
