@@ -2,7 +2,8 @@ var asset = {
     buyPrice: 0,
     sellPrice: 0,
     buyAmount: 0,
-    sellAmount: 0
+    sellAmount: 0,
+
 }
 
 var funding = 0; //期货账户开始金额
@@ -10,8 +11,8 @@ var Success = '#5cb85c'; //成功颜色
 var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
 var runTime;
-var bugGrids = [0.5, 1, 1.5, 0.5, 0.5, 1, 0.5, 1, 1.5]; //多网格
-var sellGrids = [-0.5, -1, -1.5,-0.5, -0.5, -1,-0.5, -1, -1.5]; //空网格
+var bugGrids = [0.5, 1, 0.5, 1, 1, 0.5, 1, 1, 1.5]; //多网格
+var sellGrids = [-0.5, -1, -0.5, -0.5, -1, -0.5, -1, -1, -1.5]; //空网格
 
 const BOLLEnum = {
     aboveUpline: 'aboveUpline', //上轨之上
@@ -191,15 +192,15 @@ function MACDC() {
         return -2.5;
     }
     if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d < 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2 && secondeModel.d < 0)) {
-           return 3;
-       }
+        return 3;
+    }
 
     if ((firstModel.m <= -0.2 && firstModel.c <= -0.2) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2)) {
         return 2.5;
     }
 
 
-   
+
 
     if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d > 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2)) {
         return 2.5;
@@ -402,11 +403,15 @@ function calcuetma7(ma, open, close) {
 function checkAmount() {
     var position = exchange.GetPosition()
     Stocks_ = 0;
-      asset.sellAmount = 0
-      asset.buyAmount = 0
-      asset.buyPrice = 0;
-      asset.sellPrice = 0;
-    if (position&&position.length > 0) {
+    asset.sellAmount = 0
+    asset.buyAmount = 0
+    asset.buyPrice = 0;
+    asset.sellPrice = 0;
+    asset.sellMargin = 0;
+    asset.buyMargin = 0;
+    asset.buyProfit = 0;
+    asset.sellProfit = 0;
+    if (position && position.length > 0) {
         // Log("Amount:", position[0].Amount, "FrozenAmount:", position[0].FrozenAmount, "Price:",
         //  position[0].Price, "Profit:", position[0].Profit, "Type:", position[0].Type,
         // "ContractType:", position[0].ContractType)
@@ -414,16 +419,20 @@ function checkAmount() {
             if (position[i].Type == 0) {
                 asset.buyPrice = position[i].Price;
                 asset.buyAmount = position[i].Amount;
-
+                asset.buyMargin = position[i].Margin;
+                asset.buyProfit = position[i].Profit;
             } else if (position[i].Type == 1) {
                 asset.sellPrice = position[i].Price;
                 asset.sellAmount = position[i].Amount;
+                asset.sellMargin = position[i].Margin;
+                asset.sellProfit = position[i].Profit;
+
             }
             Stocks_ = Stocks_ + position[i].Margin;
         }
         return true;
     }
-  
+
     return false
 }
 
@@ -616,7 +625,7 @@ function closeSellAction(currrentPrice) {
 
 function checkIsHaveaddAction(oredrType) {
     var orders = exchange.GetOrders()
-    if (orders&&orders.length > 0) {
+    if (orders && orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -635,7 +644,7 @@ function checkIsHaveaddAction(oredrType) {
 
 function cancleaddAction(oredrType) {
     var orders = exchange.GetOrders()
-    if (orders&&orders.length > 0) {
+    if (orders && orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -679,13 +688,13 @@ function closeAction() {
     blance_ = account.Balance;
     var currrentPrice = GetTicker().Last; //当前价格
 
-    if (asset.buyAmount > 0 && (asset.buyPrice - currrentPrice > 2.8) && asset.buyAmount < 8) {
+    if (asset.buyAmount > 0 && (asset.buyPrice - currrentPrice > 2.8) && asset.buyAmount < 6) {
         //补仓操作
         addBuyAction(currrentPrice)
         return;
     }
 
-    if (asset.sellAmount > 0 && (currrentPrice - asset.sellPrice > 2.8) && asset.sellAmount < 8) {
+    if (asset.sellAmount > 0 && (currrentPrice - asset.sellPrice > 2.8) && asset.sellAmount < 6) {
         //补仓操作
         addSellAction(currrentPrice)
         return;
@@ -740,12 +749,15 @@ function openAction(type) {
     exchange.SetDirection(type)
     if (type == "buy") {
         var buyPrice = tick.Buy; //当前价格
-
+        var buyCount = 2;
         if (asset.buyAmount == 0) {
             buyPrice = tick.Last + 1;
             tradingCounter("buyNumber", 1);
 
         } else {
+            if (asset.buyAmount == 2) {
+                buyCount = buyCount * 2;
+            }
             tradingCounter("addBuyNumber", 1);
 
 
@@ -753,8 +765,8 @@ function openAction(type) {
 
 
         //容错防止一直开仓导致爆仓
-        if (asset.buyAmount < 8) {
-            var buyid = exchange.Buy(buyPrice, 2)
+        if (asset.buyAmount < 6) {
+            var buyid = exchange.Buy(buyPrice, buyCount)
             if (buyid && asset.buyAmount == 0) {
                 exchange.CancelOrder(buyid)
             }
@@ -762,16 +774,19 @@ function openAction(type) {
 
     } else {
         var sellPrice = tick.Sell; //当前价格
-
+        var sellCount = 2
         if (asset.sellAmount == 0) {
             sellPrice = tick.Last - 1;
             tradingCounter("sellNumber", 1);
 
         } else {
+            if (asset.sellAmount == 2) {
+                sellCount = 4;
+            }
             tradingCounter("addsellNumber", 1);
         }
-        if (asset.sellAmount < 8) {
-            var buyid = exchange.Sell(sellPrice, 2)
+        if (asset.sellAmount < 6) {
+            var buyid = exchange.Sell(sellPrice, sellCount)
             if (buyid && asset.sellAmount == 0) {
                 exchange.CancelOrder(buyid)
             }
@@ -855,7 +870,7 @@ function AppendedStatus() {
     var accountTable = {
         type: "table",
         title: "币种信息",
-        cols: ["运行时间", '初始资金', '当前价格', 'ma7', 'mcd7', 'bool7', 'sum'],
+        cols: ["运行时间", '初始资金', '总盈利', '当前价格', 'ma7', 'mcd7', 'bool7', 'sum'],
         rows: []
     };
     var runday = runTime.dayDiff;
@@ -878,14 +893,15 @@ function AppendedStatus() {
     accountTable.rows.push([
         runday,
         '$' + initBlance,
+        _N((blance_ + Stocks_ - initBlance + takeupBlance), 2) + Success,
         currrentPrice,
         gyma7,
         gymcd7,
         gybool7,
         gysum,
     ]);
-      var exchangecount = (_G("buyNumber") ? _G("buyNumber") : 0) + (_G("addBuyNumber") ? _G("addBuyNumber") : 0) + (_G("sellNumber") ? _G("sellNumber") : 0)  + (_G("addsellNumber") ? _G("addsellNumber") : 0)
-    return runTime.str + '\n' + "更新时间: " + _D() + '\n' + '总交易次数:' + exchangecount + '\n' + '`' + JSON.stringify(accountTable) + '`\n' ;
+    var exchangecount = (_G("buyNumber") ? _G("buyNumber") : 0) + (_G("addBuyNumber") ? _G("addBuyNumber") : 0) + (_G("sellNumber") ? _G("sellNumber") : 0) + (_G("addsellNumber") ? _G("addsellNumber") : 0)
+    return runTime.str + '\n' + "更新时间: " + _D() + '\n' + '总交易次数:' + exchangecount + '\n' + '`' + JSON.stringify(accountTable) + '`\n';
 
 }
 
@@ -918,7 +934,7 @@ function caclueProfile() {
 //订单的开平仓方向，ORDER_OFFSET_OPEN为开仓，ORDER_OFFSET_CLOSE为平仓方向订单类型 平空ORDER_TYPE_BUY  平多ORDER_TYPE_SELL
 function cancleOrders(oredrType) {
     var orders = exchange.GetOrders()
-    if (orders&&orders.length > 0) {
+    if (orders && orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -942,7 +958,7 @@ function startBuyGrids() {
     //取消当前closeBuy订单 重新排版
     cancleOrders(ORDER_TYPE_SELL)
     var position = exchange.GetPosition()
-    if (position&&position.length > 0) {
+    if (position && position.length > 0) {
         for (var j = 0; j < position.length; j++) {
             if (position[j].Type == 0) {
                 for (var i = 0; i < bugGrids.length; i++) {
@@ -960,7 +976,7 @@ function startSellGrids() {
     exchange.SetDirection("closesell")
     var position = exchange.GetPosition()
 
-    if (position&&position.length > 0) {
+    if (position && position.length > 0) {
         for (var j = 0; j < position.length; j++) {
             if (position[j].Type == 1) {
                 for (var i = 0; i < sellGrids.length; i++) {
@@ -1024,7 +1040,7 @@ function updateStatus() { //状态栏信息
     var table = {
         type: 'table',
         title: '交易对信息',
-        cols: ['编号', '币种信息', '开仓方向', '开仓数量', '持仓价格', '开仓次数', '补仓次数'],
+        cols: ['编号', '币种信息', '开仓方向', '开仓数量', '持仓价格', '开仓次数', '补仓次数', '开仓手续费', '占用保证金', '可用保证金'],
         rows: []
     };
     table.rows.push([
@@ -1035,6 +1051,9 @@ function updateStatus() { //状态栏信息
         asset.buyPrice,
         _G("buyNumber") ? _G("buyNumber") : 0 + Success, //做多次数
         _G("addBuyNumber") ? _G("addBuyNumber") : 0 + Danger, //做多次数
+        _N(asset.buyProfit, 2) + Danger,
+        asset.buyMargin + Danger,
+        _N(blance_, 2) + (blance_ > 500 ? Success : Danger),
 
     ]);
     table.rows.push([
@@ -1045,6 +1064,9 @@ function updateStatus() { //状态栏信息
         asset.sellPrice,
         _G("sellNumber") ? _G("sellNumber") : 0 + Success, //做多次数
         _G("addsellNumber") ? _G("addsellNumber") : 0 + Danger, //做多次数
+        _N(asset.buyProfit, 2) + Danger,
+        asset.sellMargin + Danger,
+        _N(blance_, 2) + (blance_ > 500 ? Success : Danger),
 
     ]);
 
@@ -1125,6 +1147,3 @@ function tradingCounter(key, newValue) {
         _G(key, value + newValue);
     }
 }
-
-
-
