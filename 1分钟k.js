@@ -10,8 +10,8 @@ var Success = '#5cb85c'; //成功颜色
 var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
 var runTime;
-var bugGrids = [0.5, 1, 1.5, 2, 2, 2, 2, 2, 2, 2, 2]; //多网格
-var sellGrids = [-0.5, -1, -1.5, -2, -2, -2, -2, -2, -2, -2, -2]; //空网格
+var bugGrids = [0.5, 1, 1.5, 0.5, 0.5, 1, 0.5, 1, 1.5]; //多网格
+var sellGrids = [-0.5, -1, -1.5,-0.5, -0.5, -1,-0.5, -1, -1.5]; //空网格
 
 const BOLLEnum = {
     aboveUpline: 'aboveUpline', //上轨之上
@@ -190,15 +190,16 @@ function MACDC() {
     if ((firstModel.m >= 0.2 && firstModel.c >= 0.2) && (secondeModel.m >= 0.2 && secondeModel.c >= 0.2)) {
         return -2.5;
     }
+    if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d < 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2 && secondeModel.d < 0)) {
+           return 3;
+       }
 
     if ((firstModel.m <= -0.2 && firstModel.c <= -0.2) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2)) {
         return 2.5;
     }
 
 
-    if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d < 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2 && secondeModel.d < 0)) {
-        return 3;
-    }
+   
 
     if ((firstModel.m <= -0.2 && firstModel.c <= -0.2 && firstModel.d > 0) && (secondeModel.m <= -0.2 && secondeModel.c <= -0.2)) {
         return 2.5;
@@ -208,7 +209,7 @@ function MACDC() {
     //        return -2.5;
     //    }
 
-    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (firstModel.m <= -0.1 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0)) {
+    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (secondeModel.m <= -0.1 && secondeModel.m >= -0.2 && secondeModel.c >= -0.2 && secondeModel.c <= -0.1 && secondeModel.d > 0)) {
         return 1.5;
     }
 
@@ -401,8 +402,11 @@ function calcuetma7(ma, open, close) {
 function checkAmount() {
     var position = exchange.GetPosition()
     Stocks_ = 0;
-
-    if (position.length > 0) {
+      asset.sellAmount = 0
+      asset.buyAmount = 0
+      asset.buyPrice = 0;
+      asset.sellPrice = 0;
+    if (position&&position.length > 0) {
         // Log("Amount:", position[0].Amount, "FrozenAmount:", position[0].FrozenAmount, "Price:",
         //  position[0].Price, "Profit:", position[0].Profit, "Type:", position[0].Type,
         // "ContractType:", position[0].ContractType)
@@ -419,10 +423,7 @@ function checkAmount() {
         }
         return true;
     }
-    asset.sellAmount = 0
-    asset.buyAmount = 0
-    asset.buyPrice = 0;
-    asset.sellPrice = 0;
+  
     return false
 }
 
@@ -585,6 +586,7 @@ function closeBuyAction(currrentPrice) {
     var currrentPrice = GetTicker().Last; //当前价格
     var spreads = currrentPrice - asset.buyPrice;
     if (spreads > 0) {
+        cancleOrders(ORDER_TYPE_SELL)
         Log('closema7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
         Log('开多盈利离场', spreads, '@');
         var buyid = exchange.Sell(currrentPrice - 1, asset.buyAmount)
@@ -600,6 +602,7 @@ function closeSellAction(currrentPrice) {
     exchange.SetDirection("closesell")
     var spreads = asset.sellPrice - currrentPrice;
     if (spreads > 0) {
+        cancleOrders(ORDER_TYPE_BUY)
         Log('closema7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
         Log('开空盈利离场', spreads, '@');
         var buyid = exchange.Buy(currrentPrice + 1, asset.sellAmount)
@@ -613,7 +616,7 @@ function closeSellAction(currrentPrice) {
 
 function checkIsHaveaddAction(oredrType) {
     var orders = exchange.GetOrders()
-    if (orders.length > 0) {
+    if (orders&&orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -632,7 +635,7 @@ function checkIsHaveaddAction(oredrType) {
 
 function cancleaddAction(oredrType) {
     var orders = exchange.GetOrders()
-    if (orders.length > 0) {
+    if (orders&&orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -691,10 +694,8 @@ function closeAction() {
     //条件需修改
     //取消当前排版 盈利>0.1时
     if ((gysum <= -3.5) && asset.buyAmount > 0) {
-        cancleOrders(ORDER_TYPE_SELL)
         closeBuyAction(currrentPrice)
     } else if ((gysum >= 3.5) && asset.sellAmount > 0) {
-        cancleOrders(ORDER_TYPE_BUY)
         closeSellAction(currrentPrice)
     }
     /* 待修改
@@ -883,7 +884,8 @@ function AppendedStatus() {
         gybool7,
         gysum,
     ]);
-    return runTime.str + '\n' + '`' + JSON.stringify(accountTable) + '`\n' + "更新时间: " + _D() + '\n';
+      var exchangecount = (_G("buyNumber") ? _G("buyNumber") : 0) + (_G("addBuyNumber") ? _G("addBuyNumber") : 0) + (_G("sellNumber") ? _G("sellNumber") : 0)  + (_G("addsellNumber") ? _G("addsellNumber") : 0)
+    return runTime.str + '\n' + "更新时间: " + _D() + '\n' + '总交易次数:' + exchangecount + '\n' + '`' + JSON.stringify(accountTable) + '`\n' ;
 
 }
 
@@ -916,7 +918,7 @@ function caclueProfile() {
 //订单的开平仓方向，ORDER_OFFSET_OPEN为开仓，ORDER_OFFSET_CLOSE为平仓方向订单类型 平空ORDER_TYPE_BUY  平多ORDER_TYPE_SELL
 function cancleOrders(oredrType) {
     var orders = exchange.GetOrders()
-    if (orders.length > 0) {
+    if (orders&&orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -940,7 +942,7 @@ function startBuyGrids() {
     //取消当前closeBuy订单 重新排版
     cancleOrders(ORDER_TYPE_SELL)
     var position = exchange.GetPosition()
-    if (position.length > 0) {
+    if (position&&position.length > 0) {
         for (var j = 0; j < position.length; j++) {
             if (position[j].Type == 0) {
                 for (var i = 0; i < bugGrids.length; i++) {
@@ -958,7 +960,7 @@ function startSellGrids() {
     exchange.SetDirection("closesell")
     var position = exchange.GetPosition()
 
-    if (position.length > 0) {
+    if (position&&position.length > 0) {
         for (var j = 0; j < position.length; j++) {
             if (position[j].Type == 1) {
                 for (var i = 0; i < sellGrids.length; i++) {
@@ -979,7 +981,6 @@ function main() {
     var account = exchange.GetAccount();
     blance_ = account.Balance;
     var count = 0;
-    startSellGrids();
     while (true) {
         gyma7 = ma7Check();
         gymcd7 = MACDC();
@@ -990,14 +991,14 @@ function main() {
             closeAction()
         }
 
-        if (gysum >= 4.5 && asset.buyAmount < 2) {
+        if (gysum >= 4 && asset.buyAmount < 2) {
             cancleaddAction(ORDER_TYPE_BUY)
             openAction("buy")
             Log('开多ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
             startBuyGrids();
         }
 
-        if (gysum <= -4.5 && asset.sellAmount < 2) {
+        if (gysum <= -4 && asset.sellAmount < 2) {
             cancleaddAction(ORDER_TYPE_SELL)
             openAction("sell")
             Log('开空ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
@@ -1062,7 +1063,7 @@ function hasOrders() {
 
     var orders = exchange.GetOrders()
     takeupBlance = 0
-    if (orders.length > 0) {
+    if (orders && orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
             var order = orders[i]
             if (order.Status != ORDER_STATE_PENDING) {
@@ -1124,3 +1125,6 @@ function tradingCounter(key, newValue) {
         _G(key, value + newValue);
     }
 }
+
+
+
