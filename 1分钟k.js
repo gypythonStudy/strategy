@@ -205,11 +205,11 @@ function MACDC() {
     //        return -2.5;
     //    }
 
-    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (secondeModel.m <= -0.1 && secondeModel.m >= -0.2 && secondeModel.c >= -0.2 && secondeModel.c <= -0.1 && secondeModel.d > 0)) {
+    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (secondeModel.m <= -0.1 && secondeModel.m >= -0.2 && secondeModel.c >= -0.2 && secondeModel.c <= -0.1)) {
         return 1.5;
     }
 
-    if ((firstModel.m <= 0.2 && firstModel.m >= 0 && firstModel.c <= 0.2 && firstModel.c >= 0.1 && firstModel.d < 0) && (secondeModel.m <= 0.2 && secondeModel.m >= 0.1 && secondeModel.c <= 0.2 && secondeModel.c >= 0.1 && secondeModel.d < 0)) {
+    if ((firstModel.m <= 0.2 && firstModel.m >= 0 && firstModel.c <= 0.2 && firstModel.c >= 0.1 && firstModel.d < 0) && (secondeModel.m <= 0.2 && secondeModel.m >= 0.1 && secondeModel.c <= 0.2 && secondeModel.c >= 0.1)) {
         return -1.5;
     }
 
