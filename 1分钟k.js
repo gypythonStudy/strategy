@@ -758,7 +758,7 @@ function openAction(type) {
         var buyPrice = tick.Buy; //当前价格
         var buyCount = 4;
         if (asset.buyAmount == 0) {
-//            buyPrice = tick.Last + 1;
+            //            buyPrice = tick.Last + 1;
             tradingCounter("buyNumber", 1);
 
         } else {
@@ -785,7 +785,7 @@ function openAction(type) {
         var sellPrice = tick.Sell; //当前价格
         var sellCount = 4
         if (asset.sellAmount == 0) {
-//            sellPrice = tick.Last - 1;
+            //            sellPrice = tick.Last - 1;
             tradingCounter("sellNumber", 1);
 
         } else {
@@ -1019,17 +1019,20 @@ function main() {
         }
 
         if (gysum >= 4 && asset.buyAmount < 2) {
-            cancleaddAction(ORDER_TYPE_BUY)
-            openAction("buy")
-            Log('开多ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
-            startBuyGrids();
+            if (!checkIsHaveaddAction(ORDER_TYPE_BUY)) {
+                openAction("buy")
+                Log('开多ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
+                startBuyGrids();
+            }
+
         }
 
         if (gysum <= -4 && asset.sellAmount < 2) {
-            cancleaddAction(ORDER_TYPE_SELL)
-            openAction("sell")
-            Log('开空ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
-            startSellGrids();
+            if (!checkIsHaveaddAction(ORDER_TYPE_SELL)) {
+                openAction("sell")
+                Log('开空ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
+                startSellGrids();
+            }
         }
 
         runTime = RuningTime();
@@ -1198,4 +1201,3 @@ function checkBoll(isOpenmore) {
     }
     return false;
 }
-
