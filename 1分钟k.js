@@ -11,7 +11,7 @@ var Success = '#5cb85c'; //成功颜色
 var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
 var runTime;
-var bugGrids = [0.5, 0.3, 0.5, 0.3, 0.4, 0.5, 1, 1, 1.5]; //多网格
+var bugGrids = [0.5, 0.3, 0.5, 0.5, 0.4, 0.5, 1, 1, 1.5]; //多网格
 var sellGrids = [-0.5, -0.3, -0.5, -0.5, -0.4, -0.5, -1, -1, -1.5]; //空网格
 const BOLLEnum = {
     aboveUpline: 'aboveUpline', //上轨之上
@@ -754,13 +754,15 @@ function openAction(type) {
     var tick = GetTicker(); //当前价格
     exchange.SetDirection(type)
     if (type == "buy") {
+        checkIsHaveaddAction(ORDER_TYPE_BUY)
         var buyPrice = tick.Buy; //当前价格
         var buyCount = 4;
         if (asset.buyAmount == 0) {
-            buyPrice = tick.Last + 1;
+//            buyPrice = tick.Last + 1;
             tradingCounter("buyNumber", 1);
 
         } else {
+            checkIsHaveaddAction(ORDER_TYPE_SELL)
             if (asset.buyAmount == 2) {
                 buyCount = buyCount * 2;
             }
@@ -772,6 +774,7 @@ function openAction(type) {
 
         //容错防止一直开仓导致爆仓
         if (asset.buyAmount < 6) {
+            checkIsHaveaddAction(ORDER_TYPE_BUY)
             var buyid = exchange.Buy(buyPrice, buyCount)
             if (buyid && asset.buyAmount == 0) {
                 exchange.CancelOrder(buyid)
@@ -782,7 +785,7 @@ function openAction(type) {
         var sellPrice = tick.Sell; //当前价格
         var sellCount = 4
         if (asset.sellAmount == 0) {
-            sellPrice = tick.Last - 1;
+//            sellPrice = tick.Last - 1;
             tradingCounter("sellNumber", 1);
 
         } else {
@@ -1195,3 +1198,4 @@ function checkBoll(isOpenmore) {
     }
     return false;
 }
+
