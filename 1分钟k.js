@@ -5,14 +5,15 @@ var asset = {
     sellAmount: 0,
 
 }
+var addOrders = []; //记录补仓订单
 
 var funding = 0; //期货账户开始金额
 var Success = '#5cb85c'; //成功颜色
 var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
 var runTime;
-var bugGrids = [0.5, 0.3, 0.5, 0.5, 0.4, 0.5, 1, 1, 1.5]; //多网格
-var sellGrids = [-0.5, -0.3, -0.5, -0.5, -0.4, -0.5, -1, -1, -1.5]; //空网格
+var bugGrids = [0.5, 0.3, 0.5, 0.5, 0.4, 0.5, 0.5, 0.3, 0.5, 0.5, 0.4, 0.5, ]; //多网格
+var sellGrids = [-0.5, -0.3, -0.5, -0.5, -0.4, -0.5, 0.5, -0.3, -0.5, -0.5, -0.4, -0.5]; //空网格
 const BOLLEnum = {
     aboveUpline: 'aboveUpline', //上轨之上
     abovemidLine: 'abovemidLine', //中轨之上
@@ -205,11 +206,11 @@ function MACDC() {
     //        return -2.5;
     //    }
 
-    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (secondeModel.m <= -0.1 && secondeModel.m >= -0.2 && secondeModel.c >= -0.2 && secondeModel.c <= -0.1)) {
+    if ((firstModel.m <= 0 && firstModel.m >= -0.2 && firstModel.c >= -0.2 && firstModel.c <= -0.1 && firstModel.d > 0) && (secondeModel.m <= -0.1 && secondeModel.m >= -0.2 && secondeModel.c >= -0.2 && secondeModel.c <= -0.1 && secondeModel.d > 0)) {
         return 1.5;
     }
 
-    if ((firstModel.m <= 0.2 && firstModel.m >= 0 && firstModel.c <= 0.2 && firstModel.c >= 0.1 && firstModel.d < 0) && (secondeModel.m <= 0.2 && secondeModel.m >= 0.1 && secondeModel.c <= 0.2 && secondeModel.c >= 0.1)) {
+    if ((firstModel.m <= 0.2 && firstModel.m >= 0 && firstModel.c <= 0.2 && firstModel.c >= 0.1 && firstModel.d < 0) && (secondeModel.m <= 0.2 && secondeModel.m >= 0.1 && secondeModel.c <= 0.2 && secondeModel.c >= 0.1 && secondeModel.d < 0)) {
         return -1.5;
     }
 
@@ -667,7 +668,7 @@ function addBuyAction(currrentPrice) {
     if (!checkIsHaveaddAction(ORDER_TYPE_BUY) && checkBoll(true)) {
 
         openAction("buy");
-        startBuyGrids();
+        //        startBuyGrids();
         Log('开多补仓', '@');
     }
 }
@@ -675,7 +676,7 @@ function addBuyAction(currrentPrice) {
 function addSellAction(currrentPrice) {
     if (!checkIsHaveaddAction(ORDER_TYPE_SELL) && checkBoll(false)) {
         openAction("sell");
-        startSellGrids();
+        //        startSellGrids();
         Log('开空补仓', '@');
     }
 
@@ -693,7 +694,7 @@ function closeAction() {
     // Log(total_balance)
     blance_ = getBlance();
     var currrentPrice = GetTicker().Last; //当前价格
-
+    //&& gysum >= 3.5  && gysum <= -3.5
     if (asset.buyAmount > 0 && (asset.buyPrice - currrentPrice > 2.8) && asset.buyAmount < 6) {
         //补仓操作
         addBuyAction(currrentPrice)
@@ -757,7 +758,7 @@ function openAction(type) {
         var buyPrice = tick.Buy; //当前价格
         var buyCount = 4;
         if (asset.buyAmount == 0) {
-            //            buyPrice = tick.Last + 1;
+            buyPrice = tick.Last ;
             tradingCounter("buyNumber", 1);
 
         } else {
@@ -773,16 +774,22 @@ function openAction(type) {
         //容错防止一直开仓导致爆仓
         if (asset.buyAmount < 6) {
             var buyid = exchange.Buy(buyPrice, buyCount)
-            if (buyid && asset.buyAmount == 0) {
+            if (buyid && asset.buyAmount != 0) {
                 //                exchange.CancelOrder(buyid)
+                addOrders.push({
+                    'Id': buyid,
+                    'price': buyPrice,
+                    "isOpenMore": true
+                });
             }
+
         }
 
     } else {
         var sellPrice = tick.Sell; //当前价格
         var sellCount = 4
         if (asset.sellAmount == 0) {
-            //            sellPrice = tick.Last - 1;
+            sellPrice = tick.Last;
             tradingCounter("sellNumber", 1);
 
         } else {
@@ -793,8 +800,14 @@ function openAction(type) {
         }
         if (asset.sellAmount < 6) {
             var buyid = exchange.Sell(sellPrice, sellCount)
-            if (buyid && asset.sellAmount == 0) {
+            if (buyid && asset.sellAmount != 0) {
                 //                exchange.CancelOrder(buyid)
+                //                addOrders.push(buyid);
+                addOrders.push({
+                    'Id': buyid,
+                    'price': sellPrice,
+                    "isOpenMore": false
+                });
             }
         }
     }
@@ -1012,10 +1025,13 @@ function main() {
         gymcd7 = MACDC();
         gybool7 = BOLLCheck();
         gysum = gyma7 + gymcd7 + gybool7;
+        //检查是否有完成的补仓订单
+        checkIsHaveSucessAddOreder()
         //检查当前是否持仓
         if (checkAmount()) {
             closeAction()
         }
+        buyCount += 1;
 
         if (gysum >= 4 && asset.buyAmount < 2) {
             //            if (!checkIsHaveaddAction(ORDER_TYPE_BUY)) {
@@ -1030,10 +1046,11 @@ function main() {
             //                                cancleaddAction(ORDER_TYPE_BUY)
             //                             }
             //                             }
-            Sleep(1000 * 60 * 2);
+            Sleep(1000 * 20);
         }
 
         if (gysum <= -4 && asset.sellAmount < 2) {
+            buyCount = 0;
             //if (!checkIsHaveaddAction(ORDER_TYPE_SELL)) {
             cancleaddAction(ORDER_TYPE_SELL)
             openAction("sell")
@@ -1045,10 +1062,19 @@ function main() {
             //                             if (sellCount >= 10) {
 
 
-            Sleep(1000 * 60 * 2);
+            Sleep(1000 * 20);
         }
 
         runTime = RuningTime();
+
+        if (buyCount > 80) {
+            buyCount = 0;
+            cancleaddAction(ORDER_TYPE_SELL)
+            cancleaddAction(ORDER_TYPE_BUY)
+
+
+
+        }
 
         if (count >= 300) {
             count = 0;
@@ -1056,6 +1082,7 @@ function main() {
         }
         count += 1;
         updateStatus()
+        checkCanaddAction()
 
         //等待下次查询交易所
         Sleep(1000 * 2);
@@ -1213,4 +1240,73 @@ function checkBoll(isOpenmore) {
 
     }
     return false;
+}
+
+function checkIsHaveSucessAddOreder() {
+    if (addOrders.length > 0) {
+        var order = exchange.GetOrder(addOrders[0].Id)
+        Sleep(1000 * 10);
+        var order = exchange.GetOrder(addOrders[0].Id)
+        if (order.Status == ORDER_STATE_CLOSED) {
+            stardAddBirds()
+        }
+        if (order.Status == ORDER_STATE_PENDING) {
+            exchange.CancelOrder(addOrders[0].Id)
+            addOrders.pop()
+        }
+        if (order.Status == ORDER_STATE_CANCELED) {
+            addOrders.pop()
+        }
+
+    }
+}
+
+
+function stardAddBirds() {
+    if (addOrders[0].isOpenMore) {
+        exchange.SetDirection("closebuy")
+        for (var i = 0; i < bugGrids.length; i++) {
+            var buyid = exchange.Sell(addOrders[0].price + bugGrids[i], 1)
+        }
+    } else {
+        exchange.SetDirection("closesell")
+        for (var i = 0; i < sellGrids.length; i++) {
+            var buyid = exchange.Buy(addOrders[0].price + sellGrids[i], 1)
+        }
+    }
+
+}
+
+function checkCanaddAction() {
+    var currrentPrice = GetTicker().Last; //当前价格
+
+    if (gysum >= 4 && (asset.buyPrice - currrentPrice >= 1.1) && (asset.buyAmount > 0) && (asset.buyAmount <= 4)) {
+        //            if (!checkIsHaveaddAction(ORDER_TYPE_BUY)) {
+        Log("多中多");
+        buyCount = 0;
+        cancleaddAction(ORDER_TYPE_BUY)
+        addBuyAction(currrentPrice)
+        //                                               openAction("buy")
+        //                             } else {
+        //                              buyCount += 1;
+        //                             if (buyCount >= 10) {
+        //                                cancleaddAction(ORDER_TYPE_BUY)
+        //                             }
+        //                             }
+        Sleep(1000 * 15);
+    }
+
+    if (gysum <= -4 && asset.sellAmount > 0 && (currrentPrice - asset.sellPrice >= 1.1) && asset.sellAmount <= 4) {
+        //if (!checkIsHaveaddAction(ORDER_TYPE_SELL)) {
+        var currrentPrice = GetTicker().Last; //当前价格
+        Log("空中空");
+        cancleaddAction(ORDER_TYPE_SELL)
+        addSellAction(currrentPrice)
+        //                             } else {
+        //                             sellCount += 1;
+        //                             if (sellCount >= 10) {
+
+
+        Sleep(1000 * 15);
+    }
 }
