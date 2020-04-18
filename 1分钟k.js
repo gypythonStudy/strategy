@@ -88,7 +88,7 @@ function BOLLCheck() {
             return 1;
         }
 
-        if (bollEnum == BOLLEnum.beLowdownLine && (prebollEnum == BOLLEnum.throughdownLine || prebollEnum == BOLLEnum.beLowdownLine) && (prebollEnum2.throughdownLine || prebollEnum2.beLowdownLine)) {
+        if (bollEnum == BOLLEnum.beLowdownLine && (prebollEnum == BOLLEnum.throughdownLine || prebollEnum == BOLLEnum.beLowdownLine) && (prebollEnum2.throughdownLine || prebollEnum2.beLowdownLine | prebollEnum2.above)) {
             return -2.1;
         }
 
@@ -758,12 +758,12 @@ function openAction(type) {
         var buyPrice = tick.Buy; //当前价格
         var buyCount = 4;
         if (asset.buyAmount == 0) {
-            buyPrice = tick.Last ;
+            buyPrice = tick.Last;
             tradingCounter("buyNumber", 1);
 
         } else {
-            if (asset.buyAmount == 2) {
-                buyCount = buyCount * 2;
+            if (asset.buyAmount == 4) {
+                buyCount = 6;
             }
             tradingCounter("addBuyNumber", 1);
 
@@ -793,8 +793,8 @@ function openAction(type) {
             tradingCounter("sellNumber", 1);
 
         } else {
-            if (asset.sellAmount == 2) {
-                //                sellCount = 4;
+            if (asset.sellAmount == 4) {
+                sellCount = 6;
             }
             tradingCounter("addsellNumber", 1);
         }
@@ -1012,7 +1012,7 @@ function startSellGrids() {
 function main() {
 
     exchange.SetContractType("swap")
-    exchange.SetMarginLevel(10)
+    exchange.SetMarginLevel(20)
     exchange.IO("currency", "BSV_USDT")
     var account = exchange.GetAccount();
     blance_ = account.Balance;
@@ -1026,7 +1026,7 @@ function main() {
         gybool7 = BOLLCheck();
         gysum = gyma7 + gymcd7 + gybool7;
         //检查是否有完成的补仓订单
-        checkIsHaveSucessAddOreder()
+        //        checkIsHaveSucessAddOreder()
         //检查当前是否持仓
         if (checkAmount()) {
             closeAction()
@@ -1072,9 +1072,25 @@ function main() {
             cancleaddAction(ORDER_TYPE_SELL)
             cancleaddAction(ORDER_TYPE_BUY)
 
+        }
+        var pinvalue = checkPinAction();
+        //上部插针
+        if (pinvalue == 1) {
+            openAction("sell");
+            Log('顶部插针')
+            Sleep(60 * 1000);
+            startSellGrids();
 
 
         }
+        if (pinvalue == -1) {
+            openAction("buy");
+            Log('底部插针')
+            Sleep(60 * 1000);
+             startBuyGrids();
+
+        }
+
 
         if (count >= 300) {
             count = 0;
@@ -1309,4 +1325,39 @@ function checkCanaddAction() {
 
         Sleep(1000 * 15);
     }
+}
+
+function checkPinAction() {
+
+
+    var records = exchange.GetRecords(PERIOD_M1)
+    if (records && records.length > 20) {
+        var boll = TA.BOLL(records, 20, 2)
+        var currrentPrice = GetTicker().Last; //当前价格
+        var upLine = boll[0][records.length - 1]
+        var midLine = boll[1][records.length - 1]
+        var downLine = boll[2][records.length - 1]
+        //       var ClosePrice3 = records[records.length - 1].Close // 收盘价格
+        var HighPrice = records[records.length - 1].High // 最高价
+        var LowPrice = records[records.length - 1].Low // 最低价
+
+        if (currrentPrice - upLine> 1e) {
+            return 1; //开空
+        }
+
+        if (downLine - currrentPrice > 1) {
+            return -1; //开多
+        }
+
+    }
+
+
+    return 0;
+}
+
+
+//添加机器人错误重启功能
+function onerror() {
+    Log("出错i停止")
+
 }
