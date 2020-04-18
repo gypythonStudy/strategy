@@ -1020,6 +1020,8 @@ function main() {
     var count = 0;
     var buyCount = 0;
     var sellCount = 0
+                             var isPin = true;
+
     while (true) {
         gyma7 = ma7Check();
         gymcd7 = MACDC();
@@ -1068,6 +1070,7 @@ function main() {
         runTime = RuningTime();
 
         if (buyCount > 80) {
+                             isPin = true
             buyCount = 0;
             cancleaddAction(ORDER_TYPE_SELL)
             cancleaddAction(ORDER_TYPE_BUY)
@@ -1075,18 +1078,21 @@ function main() {
         }
         var pinvalue = checkPinAction();
         //上部插针
-        if (pinvalue == 1) {
+        if (pinvalue == 1 && isPin) {
+                             isPin = false;
             openAction("sell");
             Log('顶部插针')
-            Sleep(60 * 1000);
+            Sleep(60 * 10);
+            cancleaddAction(ORDER_TYPE_SELL)
             startSellGrids();
 
 
         }
-        if (pinvalue == -1) {
+        if (pinvalue == -1&& isPin) {
+                             isPin = false;
             openAction("buy");
             Log('底部插针')
-            Sleep(60 * 1000);
+            Sleep(60 * 10);
              startBuyGrids();
 
         }
