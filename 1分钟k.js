@@ -1,3 +1,4 @@
+
 var asset = {
     buyPrice: 0,
     sellPrice: 0,
@@ -13,7 +14,7 @@ var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
 var runTime;
 var bugGrids = [0.5, 0.3, 0.5, 0.5, 0.4, 0.5, 0.5, 0.3, 0.5, 0.5, 0.4, 0.5, ]; //多网格
-var sellGrids = [-0.5, -0.3, -0.5, -0.5, -0.4, -0.5, 0.5, -0.3, -0.5, -0.5, -0.4, -0.5]; //空网格
+var sellGrids = [-0.5, -0.3, -0.5, -0.5, -0.4, -0.5, -0.5, -0.3, -0.5, -0.5, -0.4, -0.5]; //空网格
 const BOLLEnum = {
     aboveUpline: 'aboveUpline', //上轨之上
     abovemidLine: 'abovemidLine', //中轨之上
@@ -417,7 +418,7 @@ function checkAmount() {
                 asset.buyAmount = position[i].Amount;
                 asset.buyMargin = position[i].Margin;
                 asset.buyProfit = position[i].Profit;
-                if (position[0].Amount != position[0].FrozenAmount) {
+                if (position[i].Amount != position[i].FrozenAmount) {
                     startBuyGrids()
                 }
             } else if (position[i].Type == 1) {
@@ -425,7 +426,7 @@ function checkAmount() {
                 asset.sellAmount = position[i].Amount;
                 asset.sellMargin = position[i].Margin;
                 asset.sellProfit = position[i].Profit;
-                if (position[0].Amount != position[0].FrozenAmount) {
+                if (position[i].Amount != position[i].FrozenAmount) {
                     startSellGrids();
                 }
 
@@ -695,13 +696,13 @@ function closeAction() {
     blance_ = getBlance();
     var currrentPrice = GetTicker().Last; //当前价格
     //&& gysum >= 3.5  && gysum <= -3.5
-    if (asset.buyAmount > 0 && (asset.buyPrice - currrentPrice > 2.8) && asset.buyAmount < 6) {
+    if (asset.buyAmount > 0 && (asset.buyPrice - currrentPrice > 2.8) && asset.buyAmount < 6 && gysum >= 4) {
         //补仓操作
         addBuyAction(currrentPrice)
         return;
     }
 
-    if (asset.sellAmount > 0 && (currrentPrice - asset.sellPrice > 2.8) && asset.sellAmount < 6) {
+    if (asset.sellAmount > 0 && (currrentPrice - asset.sellPrice > 2.8) && asset.sellAmount < 6 && gysum <= -4) {
         //补仓操作
         addSellAction(currrentPrice)
         return;
@@ -763,7 +764,7 @@ function openAction(type) {
 
         } else {
             if (asset.buyAmount == 4) {
-                buyCount = 6;
+                buyCount = 8;
             }
             tradingCounter("addBuyNumber", 1);
 
@@ -794,7 +795,7 @@ function openAction(type) {
 
         } else {
             if (asset.sellAmount == 4) {
-                sellCount = 6;
+                sellCount = 8;
             }
             tradingCounter("addsellNumber", 1);
         }
@@ -1078,7 +1079,7 @@ function main() {
         }
         var pinvalue = checkPinAction();
         //上部插针
-        if (pinvalue == 1 && isPin) {
+        if (pinvalue == 1 && isPin && asset.sellCount < 8) {
                              isPin = false;
             openAction("sell");
             Log('顶部插针')
@@ -1088,7 +1089,7 @@ function main() {
 
 
         }
-        if (pinvalue == -1&& isPin) {
+        if (pinvalue == -1&& isPin && asset.sellCount < 8) {
                              isPin = false;
             openAction("buy");
             Log('底部插针')
@@ -1347,7 +1348,7 @@ function checkPinAction() {
         var HighPrice = records[records.length - 1].High // 最高价
         var LowPrice = records[records.length - 1].Low // 最低价
 
-        if (currrentPrice - upLine> 1e) {
+        if (currrentPrice - upLine> 1) {
             return 1; //开空
         }
 
@@ -1365,5 +1366,17 @@ function checkPinAction() {
 //添加机器人错误重启功能
 function onerror() {
     Log("出错i停止")
+
+}
+
+//添加ATR 止损止盈
+function getATRValue() {
+    var records = exchange.GetRecords()
+    if (records && records.length > 14) {
+
+    var atr = TA.ATR(records, 14)
+    return atr[atr.length-1];
+    }
+    return 0.5;
 
 }
