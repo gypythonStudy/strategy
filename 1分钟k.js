@@ -1,9 +1,10 @@
-
 var asset = {
     buyPrice: 0,
     sellPrice: 0,
     buyAmount: 0,
     sellAmount: 0,
+    sellAtr: 0,
+    buyAtr: 0,
 
 }
 var addOrders = []; //记录补仓订单
@@ -34,6 +35,7 @@ const MA7Enum = {
     throughup: 'throughupline', //突破上轨
     throughdow: 'throughdowline', //突破上轨
     under: 'underline', //上轨之下
+
 }
 
 function GetTicker(e) {
@@ -435,6 +437,8 @@ function checkAmount() {
         }
         return true;
     }
+    asset.buyAtr = 0;
+    asset.sellAtr = 0;
 
     return false
 }
@@ -593,6 +597,39 @@ function checkAmount() {
 //    return 0;
 //}
 
+function closeBuyAction2(currrentPrice) {
+    var currrentPrice = GetTicker().Last; //当前价格
+    if ( asset.buyAmount > 0) {
+        exchange.SetDirection("closebuy")
+        cancleOrders(ORDER_TYPE_SELL)
+        Log('closema7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
+        Log('开多止损离场', '@');
+        var buyid = exchange.Sell(currrentPrice - 1, asset.buyAmount)
+        if (buyid) {
+            exchange.CancelOrder(buyid)
+        }
+        asset.buyAmount = 0; //默认卖出成功
+
+    }
+}
+
+
+function closeSellAction2(currrentPrice) {
+    var currrentPrice = GetTicker().Last; //当前价格
+    if (asset.sellAmount > 0) {
+        exchange.SetDirection("closesell")
+        cancleOrders(ORDER_TYPE_BUY)
+        Log('closema7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
+        Log('开空止损离场', '@');
+        var buyid = exchange.Buy(currrentPrice + 1, asset.sellAmount)
+        if (buyid) {
+            exchange.CancelOrder(buyid)
+        }
+        asset.sellAmount = 0; //默认卖出成功
+    }
+}
+
+
 function closeBuyAction(currrentPrice) {
     var currrentPrice = GetTicker().Last; //当前价格
     var spreads = currrentPrice - asset.buyPrice;
@@ -611,6 +648,7 @@ function closeBuyAction(currrentPrice) {
 }
 
 function closeSellAction(currrentPrice) {
+    var currrentPrice = GetTicker().Last; //当前价格
     var spreads = asset.sellPrice - currrentPrice;
     if (spreads > 0 && asset.sellAmount > 0) {
         exchange.SetDirection("closesell")
@@ -694,8 +732,20 @@ function closeAction() {
     //    var total_balance = _N(parseFloat(account.Info.totalWalletBalance), 2);
     // Log(total_balance)
     blance_ = getBlance();
-    var currrentPrice = GetTicker().Last; //当前价格
     //&& gysum >= 3.5  && gysum <= -3.5
+
+    if (asset.buyAmount > 0 && asset.buyPrice - asset.buyAtr > currrentPrice && (asset.buyAtr >0)) {
+        Log('ATR开多止损', '@')
+        closeBuyAction2(currrentPrice)
+        return;
+    }
+
+    if (asset.sellAmount > 0 && (asset.sellPrice + asset.sellAtr < currrentPrice) && (asset.sellAtr >0)) {
+        Log('ATR开空止损', '@')
+        closeSellAction2(currrentPrice)
+        return;
+    }
+
     if (asset.buyAmount > 0 && (asset.buyPrice - currrentPrice > 2.8) && asset.buyAmount < 6 && gysum >= 4) {
         //补仓操作
         addBuyAction(currrentPrice)
@@ -771,6 +821,9 @@ function openAction(type) {
 
         }
 
+        var atr = getATRValue()
+        asset.buyAtr = atr * 3;
+        Log('asset.buyAtr',asset.buyAtr)
 
         //容错防止一直开仓导致爆仓
         if (asset.buyAmount < 6) {
@@ -789,6 +842,10 @@ function openAction(type) {
     } else {
         var sellPrice = tick.Sell; //当前价格
         var sellCount = 4
+        var atr = getATRValue()
+        asset.sellAtr = atr * 3;
+        Log('sellAtrATR',asset.sellAtr)
+
         if (asset.sellAmount == 0) {
             sellPrice = tick.Last;
             tradingCounter("sellNumber", 1);
@@ -890,7 +947,7 @@ function AppendedStatus() {
     var accountTable = {
         type: "table",
         title: "币种信息",
-        cols: ["运行时间", '初始资金', '总盈利', '当前价格', 'ma7', 'mcd7', 'bool7', 'sum'],
+        cols: ["运行时间", '初始资金', '总盈利', '当前价格', '买入波动率', '卖出波动率', 'ma7', 'mcd7', 'bool7', 'sum'],
         rows: []
     };
     var runday = runTime.dayDiff;
@@ -916,6 +973,8 @@ function AppendedStatus() {
         '$' + initBlance,
         _N((blance_ + Stocks_ - initBlance + takeupBlance), 2) + Success,
         currrentPrice,
+        asset.buyAtr,
+        asset.sellAtr,
         gyma7,
         gymcd7,
         gybool7,
@@ -980,10 +1039,19 @@ function startBuyGrids() {
     cancleOrders(ORDER_TYPE_SELL)
     var position = exchange.GetPosition()
     if (position && position.length > 0) {
+
         for (var j = 0; j < position.length; j++) {
             if (position[j].Type == 0) {
+
+
                 for (var i = 0; i < bugGrids.length; i++) {
-                    var buyid = exchange.Sell(position[j].Price + bugGrids[i], 1)
+                    if (asset.buyAtr > 0) {
+                        exchange.Sell(position[j].Price + asset.buyAtr, 1)
+                    } else {
+                        var buyid = exchange.Sell(position[j].Price + bugGrids[i], 1)
+
+                    }
+
                 }
                 break;
             }
@@ -1000,8 +1068,14 @@ function startSellGrids() {
     if (position && position.length > 0) {
         for (var j = 0; j < position.length; j++) {
             if (position[j].Type == 1) {
+
                 for (var i = 0; i < sellGrids.length; i++) {
-                    var buyid = exchange.Buy(position[j].Price + sellGrids[i], 1)
+                    if (asset.sellAtr > 0) {
+                        exchange.Buy(position[j].Price - asset.sellAtr, 1)
+                    } else {
+                        var buyid = exchange.Buy(position[j].Price + sellGrids[i], 1)
+
+                    }
                 }
                 break;
             }
@@ -1021,7 +1095,7 @@ function main() {
     var count = 0;
     var buyCount = 0;
     var sellCount = 0
-                             var isPin = true;
+    var isPin = true;
 
     while (true) {
         gyma7 = ma7Check();
@@ -1071,7 +1145,7 @@ function main() {
         runTime = RuningTime();
 
         if (buyCount > 80) {
-                             isPin = true
+            isPin = true
             buyCount = 0;
             cancleaddAction(ORDER_TYPE_SELL)
             cancleaddAction(ORDER_TYPE_BUY)
@@ -1080,8 +1154,9 @@ function main() {
         var pinvalue = checkPinAction();
         //上部插针
         if (pinvalue == 1 && isPin && asset.sellCount < 8) {
-                             isPin = false;
+            isPin = false;
             openAction("sell");
+
             Log('顶部插针')
             Sleep(60 * 10);
             cancleaddAction(ORDER_TYPE_SELL)
@@ -1089,12 +1164,12 @@ function main() {
 
 
         }
-        if (pinvalue == -1&& isPin && asset.sellCount < 8) {
-                             isPin = false;
+        if (pinvalue == -1 && isPin && asset.buyCount < 8) {
+            isPin = false;
             openAction("buy");
             Log('底部插针')
             Sleep(60 * 10);
-             startBuyGrids();
+            startBuyGrids();
 
         }
 
@@ -1338,6 +1413,7 @@ function checkPinAction() {
 
 
     var records = exchange.GetRecords(PERIOD_M1)
+                                            
     if (records && records.length > 20) {
         var boll = TA.BOLL(records, 20, 2)
         var currrentPrice = GetTicker().Last; //当前价格
@@ -1348,7 +1424,7 @@ function checkPinAction() {
         var HighPrice = records[records.length - 1].High // 最高价
         var LowPrice = records[records.length - 1].Low // 最低价
 
-        if (currrentPrice - upLine> 1) {
+        if (currrentPrice - upLine > 1) {
             return 1; //开空
         }
 
@@ -1374,8 +1450,8 @@ function getATRValue() {
     var records = exchange.GetRecords()
     if (records && records.length > 14) {
 
-    var atr = TA.ATR(records, 14)
-    return atr[atr.length-1];
+        var atr = TA.ATR(records, 14)
+        return atr[atr.length - 1];
     }
     return 0.5;
 
