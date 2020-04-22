@@ -161,11 +161,11 @@ function calcuetLine(OpenPrice2, ClosePrice2, preupLine2, premidLine2, predownLi
 }
 
 function MACDC() {
-    var records = exchange.GetRecords(PERIOD_M1);
+    var records = exchange.GetRecords(PERIOD_M1,7,14,9);
     if (!records) {
         return 0;
     }
-    var macd = TA.MACD(records, 7, 14, 7)
+    var macd = TA.MACD(records)
     var mcdArray = new Array();
     var firstBuy = false;
     var firstSell = false;
@@ -295,7 +295,7 @@ function ma7Check() {
     var records = exchange.GetRecords(PERIOD_M1)
     // K线bar数量满足指标计算周期
     if (records && records.length > 7) {
-        var ma = TA.MA(records, 7)
+        var ma = TA.MA(records, 5)
         //        var currrentPrice = GetTicker().Last; //当前价格
         var ma1 = ma[records.length - 1]
         var open = records[records.length - 1].Close // 收盘价格
@@ -1105,16 +1105,10 @@ function main() {
             buyCount = 0;
             cancleaddAction(ORDER_TYPE_BUY)
             openAction("buy", 4)
-            var records = exchange.GetRecords(PERIOD_M1)
-            if (records && records.length > 30) {
-                var low = TA.Lowest(records, 30, 'Low');
-                if (low < asset.lowPrice && asset.lowPrice != 0) {
-                    asset.lowPrice = low;
-                }
-                Log('asset.lowPrice', asset.lowPrice)
-            }
+         
             Log('开多ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
             startBuyGrids();
+                             
             //                             } else {
             //                              buyCount += 1;
             //                             if (buyCount >= 10) {
@@ -1125,6 +1119,14 @@ function main() {
 
                              closeSellAction2(currrentPrice)
             Sleep(1000 * 20);
+                             var records = exchange.GetRecords(PERIOD_M1)
+                             if (records && records.length > 30) {
+                                 var low = TA.Lowest(records, 30, 'Low');
+                                 if (low < asset.lowPrice && asset.lowPrice != 0) {
+                                     asset.lowPrice = low;
+                                 }
+                                 Log('asset.lowPrice', asset.lowPrice)
+                             }
 
 
         }
@@ -1138,18 +1140,19 @@ function main() {
             sellCount = 0;
             Log('开空ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
             startSellGrids();
-            var records = exchange.GetRecords(PERIOD_M1)
-            if (records && records.length > 30) {
-                var high = TA.Highest(records, 30, 'High')
-                if (asset.highPrice < high) {
-                    asset.highPrice = high;
-                }
-                Log('asset.highPrice', asset.highPrice)
-            }
+           
                              var currrentPrice = GetTicker().Last; //当前价格
 
             closeBuyAction2(currrentPrice)
             Sleep(1000 * 20);
+                             var records = exchange.GetRecords(PERIOD_M1)
+                                        if (records && records.length > 30) {
+                                            var high = TA.Highest(records, 30, 'High')
+                                            if (asset.highPrice < high) {
+                                                asset.highPrice = high;
+                                            }
+                                            Log('asset.highPrice', asset.highPrice)
+                                        }
         }
 
         runTime = RuningTime();
