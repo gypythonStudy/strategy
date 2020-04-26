@@ -5,11 +5,19 @@ var asset = {
     sellAmount: 0,
     sellAtr: 0,
     buyAtr: 0,
-    highPrice: 184,
-    lowPrice: 0,
+    highPrice: 186.94,
+    lowPrice: 184.9,
 
 }
 var addOrders = []; //记录补仓订单
+var buyBirdsOrder = [];
+var sellBirdsOrder = [];
+var closeBuyBirdsOrder = [];
+var closeSellBirdsOrder = [];
+var buyStep = 0;
+var sellStep = 0;
+var closebuyIds = [];
+var closeSellIds = [];
 
 var funding = 0; //期货账户开始金额
 var Success = '#5cb85c'; //成功颜色
@@ -17,7 +25,7 @@ var Danger = '#ff0000'; //危险颜色
 var Warning = '#f0ad4e'; //警告颜色
 var runTime;
 var bugGrids = [0.5, 0.3, 0.5, 0.5, 0.4, 0.5, 0.5, 0.3, 0.5, 0.5, 0.4, 0.5, ]; //多网格
-var sellGrids = [-1, -1, -1, -1, -0.5, -0.3, -0.5, -0.5, -0.4, -0.5, -0.5, -0.3, -0.5, -0.5, -0.4, -0.5]; //空网格
+var sellGrids = [-0.5, -0.3, -0.5, -0.5, -0.4, -0.5, -0.5, -0.3, -0.5, -0.5, -0.4, -0.5]; //空网格
 const BOLLEnum = {
     aboveUpline: 'aboveUpline', //上轨之上
     abovemidLine: 'abovemidLine', //中轨之上
@@ -161,11 +169,11 @@ function calcuetLine(OpenPrice2, ClosePrice2, preupLine2, premidLine2, predownLi
 }
 
 function MACDC() {
-    var records = exchange.GetRecords(PERIOD_M1,7,14,9);
+    var records = exchange.GetRecords(PERIOD_M1);
     if (!records) {
         return 0;
     }
-    var macd = TA.MACD(records)
+    var macd = TA.MACD(records,7,14,5)
     var mcdArray = new Array();
     var firstBuy = false;
     var firstSell = false;
@@ -295,7 +303,7 @@ function ma7Check() {
     var records = exchange.GetRecords(PERIOD_M1)
     // K线bar数量满足指标计算周期
     if (records && records.length > 7) {
-        var ma = TA.MA(records, 5)
+        var ma = TA.MA(records, 7)
         //        var currrentPrice = GetTicker().Last; //当前价格
         var ma1 = ma[records.length - 1]
         var open = records[records.length - 1].Close // 收盘价格
@@ -400,7 +408,18 @@ function checkAmount() {
                 asset.buyMargin = position[i].Margin;
                 asset.buyProfit = position[i].Profit;
                 if (position[i].Amount != position[i].FrozenAmount) {
-                    startBuyGrids()
+
+                    if (buyBirdsOrder.length > 0) {
+                        checkIsHaveSucessBirdOreder();
+                        startBuyGrids()
+                    } else {
+                        startBuyGrids()
+                        if (asset.lowPrice > 0 && asset.buyPrice > asset.lowPrice) {
+                            buyStep = _N((asset.buyPrice - asset.lowPrice) / 3, 2)
+                            openBirdsAction("buy", _N(parseFloat(asset.buyPrice - buyStep), 2), 2)
+                        }
+
+                    }
                 }
             } else if (position[i].Type == 1) {
                 asset.sellPrice = position[i].Price;
@@ -408,7 +427,17 @@ function checkAmount() {
                 asset.sellMargin = position[i].Margin;
                 asset.sellProfit = position[i].Profit;
                 if (position[i].Amount != position[i].FrozenAmount) {
-                    startSellGrids();
+                    if (sellBirdsOrder.length > 0) {
+                        checkIsHaveSucessBirdOreder();
+                        startSellGrids();
+                    } else {
+                        startSellGrids();
+                        if (asset.highPrice > 0 && asset.highPrice > asset.sellPrice) {
+                            sellStep = _N(parseFloat((asset.highPrice - asset.sellPrice) / 3), 2)
+                            openBirdsAction("sell", _N(parseFloat(asset.sellPrice + sellStep), 2), 2)
+                        }
+
+                    }
                 }
 
             }
@@ -583,7 +612,7 @@ function closeBuyAction2(currrentPrice) {
         cancleOrders(ORDER_TYPE_SELL)
         Log('closema7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
         Log('开多止损离场', '@');
-        var buyid = exchange.Sell(currrentPrice , asset.buyAmount)
+        var buyid = exchange.Sell(currrentPrice, asset.buyAmount)
         if (buyid) {
             exchange.CancelOrder(buyid)
         }
@@ -600,7 +629,7 @@ function closeSellAction2(currrentPrice) {
         cancleOrders(ORDER_TYPE_BUY)
         Log('closema7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
         Log('开空止损离场', '@');
-        var buyid = exchange.Buy(currrentPrice , asset.sellAmount)
+        var buyid = exchange.Buy(currrentPrice, asset.sellAmount)
         if (buyid) {
             exchange.CancelOrder(buyid)
         }
@@ -662,7 +691,7 @@ function checkIsHaveaddAction(oredrType) {
     return false;
 }
 
-function cancleaddAction(oredrType) {
+function cancleaddAction(oredrType, isAll) {
     var orders = exchange.GetOrders()
     if (orders && orders.length > 0) {
         for (var i = 0; i < orders.length; i++) {
@@ -673,6 +702,9 @@ function cancleaddAction(oredrType) {
             if (order.Offset == ORDER_OFFSET_OPEN) {
                 //开多 、开空
                 if (order.Type == oredrType) {
+                    if (!isAll && (sellBirdsOrder.length > 0 && sellBirdsOrder[0].Id == order.Id) || (buyBirdsOrder.length > 0 && buyBirdsOrder[0].Id == order.Id)) {
+                        continue;
+                    }
                     exchange.CancelOrder(order.Id)
 
                 }
@@ -744,22 +776,32 @@ function closeAction() {
     //新版止损
     if (asset.buyAmount > 0 && (asset.lowPrice - 0.3 > currrentPrice)) {
         Log('新版开多止损', '@')
+        cancleaddAction(ORDER_TYPE_BUY, true)
+        cancleaddAction(ORDER_TYPE_SELL, true)
         closeBuyAction2(currrentPrice)
         return;
     }
     if (asset.sellAmount > 0 && (asset.highPrice < currrentPrice - 0.3)) {
         Log('新版开空止损', '@')
+        cancleaddAction(ORDER_TYPE_BUY, true)
+        cancleaddAction(ORDER_TYPE_SELL, true)
         closeSellAction2(currrentPrice)
         return;
     }
     //    return;
     //条件需修改
     //取消当前排版 盈利>0.1时
-    //    if ((gysum <= -4)) {
-    // closeBuyAction(currrentPrice)
-    //    } else if ((gysum >= 4)) {
-    // closeSellAction(currrentPrice)
-    //    }
+    if ((gysum <= -3.5)) {
+        cancleaddAction(ORDER_TYPE_BUY, true)
+        cancleaddAction(ORDER_TYPE_SELL, true)
+
+        closeBuyAction2(currrentPrice)
+    } else if ((gysum >= 3.5)) {
+        cancleaddAction(ORDER_TYPE_BUY, true)
+        cancleaddAction(ORDER_TYPE_SELL, true)
+
+        closeSellAction2(currrentPrice)
+    }
     /* 待修改
     if (asset.isOpenmore ) {
         var diff = (asset.openprice - currrentPrice) / asset.openprice * currrentPrice * asset.amount;
@@ -816,30 +858,25 @@ function openAction(type, count) {
 
         }
 
-        var atr = getATRValue()
-        asset.buyAtr = atr * 3;
-        Log('asset.buyAtr', asset.buyAtr)
-
         //容错防止一直开仓导致爆仓
         if (asset.buyAmount < 6) {
-            var buyid = exchange.Buy(buyPrice, buyCount)
-            if (buyid && asset.buyAmount != 0) {
-                //               exchange.CancelOrder(buyid)
-                addOrders.push({
-                    'Id': buyid,
-                    'price': buyPrice,
-                    "isOpenMore": true
-                });
+            for (var i = 0; i < buyCount; i++) {
+                exchange.Buy(buyPrice - 0.01 * i, 1)
             }
+            //            if (buyid && asset.buyAmount != 0) {
+            //                //               exchange.CancelOrder(buyid)
+            //                addOrders.push({
+            //                    'Id': buyid,
+            //                    'price': buyPrice,
+            //                    "isOpenMore": true
+            //                });
+            //            }
 
         }
 
     } else {
         var sellPrice = tick.Sell; //当前价格
         var sellCount = count
-        var atr = getATRValue()
-        asset.sellAtr = atr * 3;
-        Log('sellAtrATR', asset.sellAtr)
 
         if (asset.sellAmount == 0) {
             sellPrice = tick.Last;
@@ -852,16 +889,19 @@ function openAction(type, count) {
             tradingCounter("addsellNumber", 1);
         }
         if (asset.sellAmount < 6) {
-            var buyid = exchange.Sell(sellPrice, sellCount)
-            if (buyid && asset.sellAmount != 0) {
-                //                exchange.CancelOrder(buyid)
-                //                addOrders.push(buyid);
-                addOrders.push({
-                    'Id': buyid,
-                    'price': sellPrice,
-                    "isOpenMore": false
-                });
+            for (var i = 0; i < sellCount; i++) {
+                exchange.Sell(sellPrice + 0.01 * i, 1)
             }
+            //            var buyid = exchange.Sell(sellPrice, sellCount)
+            //            if (buyid && asset.sellAmount != 0) {
+            //                //                exchange.CancelOrder(buyid)
+            //                //                addOrders.push(buyid);
+            //                addOrders.push({
+            //                    'Id': buyid,
+            //                    'price': sellPrice,
+            //                    "isOpenMore": false
+            //                });
+            //            }
         }
     }
     Sleep(1000);
@@ -1024,7 +1064,7 @@ function cancleOrders(oredrType) {
 function startBuyGrids() {
     exchange.SetDirection("closebuy")
     //取消当前closeBuy订单 重新排版
-    cancleOrders(ORDER_TYPE_SELL)
+    //    cancleOrders(ORDER_TYPE_SELL)
     var position = exchange.GetPosition()
     if (position && position.length > 0) {
 
@@ -1049,7 +1089,7 @@ function startBuyGrids() {
 
 function startSellGrids() {
     //取消当前closesell订单 重新排版
-    cancleOrders(ORDER_TYPE_BUY)
+    //    cancleOrders(ORDER_TYPE_BUY)
     exchange.SetDirection("closesell")
     var position = exchange.GetPosition()
 
@@ -1103,30 +1143,28 @@ function main() {
             isPin = true;
             //            if (!checkIsHaveaddAction(ORDER_TYPE_BUY)) {
             buyCount = 0;
-            cancleaddAction(ORDER_TYPE_BUY)
+            cancleaddAction(ORDER_TYPE_BUY, true)
+            cancleaddAction(ORDER_TYPE_SELL, true)
             openAction("buy", 4)
-         
+
             Log('开多ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
             startBuyGrids();
-                             
+
             //                             } else {
             //                              buyCount += 1;
             //                             if (buyCount >= 10) {
             //                                cancleaddAction(ORDER_TYPE_BUY)
             //                             }
             //                             }
-                             var currrentPrice = GetTicker().Last; //当前价格
+            var currrentPrice = GetTicker().Last; //当前价格
 
-                             closeSellAction2(currrentPrice)
-            Sleep(1000 * 20);
-                             var records = exchange.GetRecords(PERIOD_M1)
-                             if (records && records.length > 30) {
-                                 var low = TA.Lowest(records, 30, 'Low');
-                                 if (low < asset.lowPrice && asset.lowPrice != 0) {
-                                     asset.lowPrice = low;
-                                 }
-                                 Log('asset.lowPrice', asset.lowPrice)
-                             }
+            //closeSellAction2(currrentPrice)
+            Sleep(1000 * 60);
+            var records = exchange.GetRecords(PERIOD_M1)
+            if (records && records.length > 30) {
+                asset.lowPrice = TA.Lowest(records, 30, 'Low');;
+                Log('asset.lowPrice', asset.lowPrice)
+            }
 
 
         }
@@ -1135,24 +1173,23 @@ function main() {
             isPin = true;
             buyCount = 0;
             //if (!checkIsHaveaddAction(ORDER_TYPE_SELL)) {
-            cancleaddAction(ORDER_TYPE_SELL)
+            cancleaddAction(ORDER_TYPE_SELL, true)
+            cancleaddAction(ORDER_TYPE_BUY, true)
             openAction("sell", 4)
             sellCount = 0;
             Log('开空ma7:', gyma7, 'mcd7:', gymcd7, 'bool7:', gybool7, 'sum:', gysum, '@');
             startSellGrids();
-           
-                             var currrentPrice = GetTicker().Last; //当前价格
 
-            closeBuyAction2(currrentPrice)
-            Sleep(1000 * 20);
-                             var records = exchange.GetRecords(PERIOD_M1)
-                                        if (records && records.length > 30) {
-                                            var high = TA.Highest(records, 30, 'High')
-                                            if (asset.highPrice < high) {
-                                                asset.highPrice = high;
-                                            }
-                                            Log('asset.highPrice', asset.highPrice)
-                                        }
+            var currrentPrice = GetTicker().Last; //当前价格
+
+            // closeBuyAction2(currrentPrice)
+            Sleep(1000 * 60);
+            var records = exchange.GetRecords(PERIOD_M1)
+            if (records && records.length > 30) {
+                
+                asset.highPrice = TA.Highest(records, 30, 'High');
+                Log('asset.highPrice', asset.highPrice)
+            }
         }
 
         runTime = RuningTime();
@@ -1160,18 +1197,30 @@ function main() {
         if (buyCount > 80) {
             isPin = true
             buyCount = 0;
-            cancleaddAction(ORDER_TYPE_SELL)
-            cancleaddAction(ORDER_TYPE_BUY)
+            if (asset.sellAmount > 0) {
+                cancleaddAction(ORDER_TYPE_SELL, false)
+
+            } else {
+                cancleaddAction(ORDER_TYPE_SELL, true)
+
+            }
+            if (asset.buyAmount > 0) {
+                cancleaddAction(ORDER_TYPE_BUY, false)
+
+            } else {
+                cancleaddAction(ORDER_TYPE_BUY, true)
+
+            }
 
         }
         //        var pinvalue = checkPinAction();
         //        //上部插针
         //        if (pinvalue == 1 && isPin && asset.sellCount < 8) {
         //            isPin = false;
-        //            openAction("sell",20);
+        //            openAction("sell", 20);
         //
         //            Log('顶部插针')
-        //            Sleep(60 * 10);
+        //            Sleep(60 * 1000);
         //            cancleaddAction(ORDER_TYPE_SELL)
         //            startSellGrids();
         //
@@ -1180,9 +1229,9 @@ function main() {
         //
         //        if (pinvalue == -1 && isPin && asset.buyCount < 8) {
         //            isPin = false;
-        //            openAction("buy",8);
+        //            openAction("buy", 8);
         //            Log('底部插针')
-        //            Sleep(60 * 10);
+        //            Sleep(60 * 1000);
         //            startBuyGrids();
         //
         //        }
@@ -1384,6 +1433,66 @@ function stardAddBirds() {
 
 }
 
+function checkIsHaveSucessBirdOreder() {
+    if (buyBirdsOrder.length > 0) {
+        var order = exchange.GetOrder(buyBirdsOrder[0].Id)
+        if (order.Status == ORDER_STATE_CLOSED) {
+            exchange.SetDirection("closebuy")
+            var buyid = exchange.Sell(_N(parseFloat(buyBirdsOrder[0].price + buyStep), 2), parseFloat(buyBirdsOrder[0].count))
+            if (buyid) {
+                closebuyIds.push({
+                    Id: buyid,
+                    price: buyBirdsOrder[0].price + buyStep,
+                    count: buyBirdsOrder[0].count
+                })
+                if (buyBirdsOrder[0].price - buyStep >= asset.lowPrice) {
+                    openBirdsAction("buy", _N(parseFloat(buyBirdsOrder[0].price - buyStep), 2), parseFloat(buyBirdsOrder[0].count + 2))
+                    Log('开始下次多方网格:' + buyBirdsOrder[0].price + '数量:' + buyBirdsOrder[0].count + 2);
+                }
+
+            }
+            if (order.Status == ORDER_STATE_CANCELED) {
+                buyBirdsOrder.pop()
+            }
+
+        } else if (sellBirdsOrder.length > 0) {
+            var order = exchange.GetOrder(sellBirdsOrder[0].Id)
+            if (order.Status == ORDER_STATE_CLOSED) {
+                exchange.SetDirection("closesell");
+                var buyid = exchange.Buy(_N(parseFloat(sellBirdsOrder[0].price - sellStep), 2), parseFloat(sellBirdsOrder[0].count))
+                closeSellIds.push({
+                    Id: buyid,
+                    price: sellBirdsOrder[0].price - sellStep,
+                    count: sellBirdsOrder[0].count
+                })
+                if (sellBirdsOrder[0].price + sellStep <= asset.highPrice) {
+                    openBirdsAction("sell", _N(parseFloat(sellBirdsOrder[0].price + sellStep), 2), parseFloat(sellBirdsOrder[0].count + 2))
+                    Log('开始下次空方网格:' + sellBirdsOrder[0].price + '数量:' + sellBirdsOrder[0].count + 2);
+                }
+            }
+            if (order.Status == ORDER_STATE_CANCELED) {
+                sellBirdsOrder.pop()
+            }
+        }
+    }
+
+}
+
+function stardAddBirds2() {
+    if (addOrders[0].isOpenMore) {
+        exchange.SetDirection("closebuy")
+        for (var i = 0; i < bugGrids.length; i++) {
+            var buyid = exchange.Sell(addOrders[0].price + buyStep, 1)
+        }
+    } else {
+        exchange.SetDirection("closesell")
+        for (var i = 0; i < sellGrids.length; i++) {
+            var buyid = exchange.Buy(addOrders[0].price + sellGrids[i], 1)
+        }
+    }
+
+}
+
 function checkCanaddAction() {
     var currrentPrice = GetTicker().Last; //当前价格
     /*
@@ -1455,7 +1564,6 @@ function onerror() {
 
 }
 
-//添加ATR 止损止盈
 function getATRValue() {
     //    var records = exchange.GetRecords()
     //    if (records && records.length > 14) {
@@ -1468,4 +1576,38 @@ function getATRValue() {
 
 }
 
+function openBirdsAction(type, price, count) {
+    var tick = GetTicker(); //当前价格
+    exchange.SetDirection(type)
+    if (type == "buy") {
+
+        if (asset.buyAmount < 20) {
+            var buyId = exchange.Buy(price, count)
+            if (buyId) {
+                buyBirdsOrder.pop()
+                buyBirdsOrder.push({
+                    'Id': buyId,
+                    'price': price,
+                    'count':count,
+                });
+            }
+
+        }
+
+    } else {
+
+        if (asset.sellAmount < 20) {
+            var sellId = exchange.Sell(price, count)
+            if (sellId) {
+                sellBirdsOrder.pop()
+                sellBirdsOrder.push({
+                    'Id': sellId,
+                    'price': price,
+                    'count':count,
+                });
+            }
+        }
+    }
+    Sleep(1000);
+}
 
