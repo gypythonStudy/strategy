@@ -60,6 +60,7 @@ function startSellGrids(price,amount) {
 
 function checkAmount(isMore) {
     var position = exchange.GetPosition()
+    counts += 1
     if (position && position.length > 0) {
         // Log("Amount:", position[0].Amount, "FrozenAmount:", position[0].FrozenAmount, "Price:",
         //  position[0].Price, "Profit:", position[0].Profit, "Type:", position[0].Type,
@@ -69,36 +70,55 @@ function checkAmount(isMore) {
                 if (  position[i].Price - currrentPrice > (currrentPrice * stopLoss)) {
                     Log('开多止损')
                     cancleOrders(ORDER_TYPE_SELL)
-                    closeBuyAction(currrentPrice * 0.97,position[i].Amount)
+                    closeBuyAction(currrentPrice - 1,position[i].Amount)
                 }
                 if (position[i].Amount != position[i].FrozenAmount) {
                     cancleOrders(ORDER_TYPE_SELL)
-                    startBuyGrids(parseFloat((mid + sellP)/2),position[i].Amount)
+                    var AM = position[i].Amount;
+                    for (var i = 0;i < AM;i++) {
+                        var p = position[i].Price + 0.2
+                    startBuyGrids(parseFloat(p + (Math.random() * 0.25)),1)
+                    }
                 }
             } else if (position[i].Type == 1) {
                 if ( currrentPrice - position[i].Price  > (currrentPrice * stopLoss)) {
                     Log('开空止损')
                     cancleOrders(ORDER_TYPE_BUY)
-                    closeSellAction(currrentPrice * 1.05,position[i].Amount)
+                    closeSellAction(currrentPrice + 1,position[i].Amount)
                 }
                 if (position[i].Amount != position[i].FrozenAmount) {
                     cancleOrders(ORDER_TYPE_BUY)
-                    startSellGrids(parseFloat((mid + sellP)/2),position[i].Amount);
+                    var AM = position[i].Amount;
+                    var p = position[i].Price - 0.2
+                                             for (var i = 0;i < AM;i++) {
+                                             startSellGrids(parseFloat(p - (Math.random() * 0.25)),1);
+
+                                            }
                 }
 
             }
         }
         return true;
     }
+    blance_ = getBlance()
+    if (blance_ < 800) {
+        onexit();
+        Log(aaaa)
+    }
+    if (counts > 100) {
+        LogProfit(blance_ - 900)
+        counts = 0;
+    }
                                                          isOpen = false;
     return false
 }
+var counts = 0;
 
 
 function main() {
-     exchange.SetContractType("quarter")
+     exchange.SetContractType("swap")
      exchange.SetMarginLevel(20)
-    //exchange.IO("currency", "BSV_USDT")
+    exchange.IO("currency", "BSV_USDT")
      var account = exchange.GetAccount();
      blance_ = account.Balance;
 
@@ -126,10 +146,11 @@ function main() {
     }
     //买单排版
     mid = (buyP + sellP)/2
-    blance_ = 300;
     //资金的十分之一
     quantity = _N(((blance_ * 20) * 0.1)/currrentPrice,0)
+                  quantity = 5;
     if (currrentPrice < mid && !isOpen) {
+                  Log(model.high,model.low)
         //清空空单
         isOpen = true;
                   cancleaddAction(ORDER_TYPE_SELL, true)
@@ -145,15 +166,17 @@ function main() {
     //卖单排版
     if (currrentPrice > mid && !isOpen) {
                    //清空多单
+                  Log(model.high,model.low)
                   cancleaddAction(ORDER_TYPE_SELL, true)
                   cancleaddAction(ORDER_TYPE_BUY, true)
 
                   isOpen = true;
           for (var i = 0;i < quantity;i++) {
-                openAction("sell",buyP + (Math.random() * 0.2),1)
+                openAction("sell",sellP - (Math.random() * 0.2),1)
           }
    
     }
+                  Sleep(1000 * 2)
 
                   }
 

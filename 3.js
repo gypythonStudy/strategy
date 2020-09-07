@@ -413,7 +413,7 @@ function checkAmount() {
                         var downLine = boll[2][records.length - 1]
 //                        cancleOrders(ORDER_TYPE_SELL)
 //                        startBuyGrids(parseFloat((midLine + upLine)/2), position[i].Amount)
-                        startBuyGrids(position[i].Price + 100, position[i].Amount)
+                        startBuyGrids(position[i].Price + 50, position[i].Amount)
 
                     }
                 }
@@ -432,7 +432,7 @@ function checkAmount() {
                         var downLine = boll[2][records.length - 1]
 //                        cancleOrders(ORDER_TYPE_BUY)
 //                        startSellGrids(parseFloat((downLine + midLine)/2), position[i].Amount);
-                        startSellGrids(position[i].Price - 100, position[i].Amount);
+                        startSellGrids(position[i].Price - 50, position[i].Amount);
 
                     }
                 }
@@ -633,19 +633,18 @@ function MAOut() {
 function openDirction() {
     var records = exchange.GetRecords(PERIOD_H1)
     var macd = TA.MACD(records)
-    var d = macd[2][records.length - 1];
-   var d2 = macd[2][records.length - 2];
-
-    if (d > 0 && d2 < 0) {
+    d = macd[2][records.length - 1];
+    if (d > 5) {
         currentOpenP = GetTicker().Last; //当前价格
 
         return true //多头
     }
     
-    if (d < 0 && d2 > 0) {
+    if (d < -5) {
         currentOpenP = GetTicker().Last; //当前价格
         return false//空头
     }
+    currentOpenP = 0;
 }
 var currentOpenP = 0
 
