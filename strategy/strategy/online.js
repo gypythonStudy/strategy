@@ -51,13 +51,15 @@ function getExchangeAccountInfo() {
     }
     return;
 }
-
+var pressure_60 = 0;
+var pressure_80 = 0;
+var pressure_120 = 0;
 function AppendedStatus() {
 
     var accountTable = {
         type: "table",
         title: "当前信息",
-        cols: ["运行时间", '更新时间', '当前价格', 'bisa_7', 'bisa_60', "当前bias_7", "当前bisa_60"],
+        cols: ["运行时间", '更新时间', '当前价格', 'bisa_7', 'bisa_60', "当前bias_7", "当前bisa_60",'60日均线','80均线','120均线'],
         rows: []
     };
     runTime = RuningTime();
@@ -74,6 +76,9 @@ function AppendedStatus() {
         bias_60,
         current_bias_7,
         current_bias_60,
+        pressure_60,
+        pressure_80,
+        pressure_120,
     ]);
     return '`' + JSON.stringify(accountTable) + '`';
 
@@ -138,7 +143,7 @@ function accountInfo() {
     table.rows.push([
         initBlance(),
         info.equity,
-        info.total_avail_balance,
+        info.can_withdraw,
         info.underlying ? info.underlying : BTC_USDT ,
         info.margin_frozen ? info.margin_frozen : 0,
         info.margin_for_unfilled ? info.margin_frozen : 0,
@@ -206,7 +211,7 @@ function openAction(type, price, count) {
     Sleep(1000 * 60);
 }
 
-var mp = 0;
+var mp = 1;
 
 function getBias(r, row) {
 
@@ -279,6 +284,7 @@ var bias_60 = 0;
 var current_bias_7 = 0;
 var current_bias_60 = 0;
 
+
 function trade() {
 
     var r = getRecords(PERIOD_H1);
@@ -289,7 +295,9 @@ function trade() {
     bias_60 = getBias(r, long);
     current_bias_7 = getCurrentBias(r, short);
     current_bias_60 = getCurrentBias(r, long);
-
+    pressure_60 = talib.MA(r,60)[r.length - 1];
+    pressure_80 = talib.MA(r,80)[r.length - 1];
+    pressure_120 = talib.MA(r,120)[r.length - 1];
     var currentPrice = GetTicker().Last
 
     if (bias_7 > 0 && bias_60 < 0) {
@@ -324,11 +332,26 @@ function trade() {
         closeBuyAction(currentPrice);
     }
 
-    if (bias_7 < -4.5 && mp == -1) {
+    if (bias_7 < -3 && mp == -1) {
         mp = 0
         Log('平空', currentPrice)
         closeSellAction(currentPrice)
     }
+     if (mp == 1) {
+         if (currentPrice > pressure_60) {
+             mp = 0;
+             Log('平多', currentPrice)
+             closeBuyAction(currentPrice);
+         }
+     }
+    
+//     if (mp == -1) {
+//            if (currentPrice > pressure_60) {
+//                mp = 0;
+//                Log('平多', currentPrice)
+//                closeBuyAction(currentPrice);
+//            }
+//        }
 
 
 }
